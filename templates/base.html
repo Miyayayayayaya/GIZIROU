@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="会議後の議事録整理とフォローアップを支援するAIエージェント">
+    <title>{% block title %}Meeting Follow-up AI{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+  </head>
+  <body data-page="{% block page_name %}{% endblock %}">
+    <header class="site-header">
+      <a class="brand" href="{{ url_for('index') }}" aria-label="Meeting Follow-up AI ホーム">
+        <span class="brand-mark" aria-hidden="true">M</span>
+        <span>Meeting Follow-up AI</span>
+      </a>
+      <span class="status-badge">Human reviewed</span>
+    </header>
+
+    <main>{% block content %}{% endblock %}</main>
+
+    <footer class="site-footer">
+      <p>AIの生成内容は、必ず確認・編集してから利用してください。</p>
+    </footer>
+  </body>
+</html>

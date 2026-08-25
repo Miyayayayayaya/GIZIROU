@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block title %}送信前確認 | Meeting Follow-up AI{% endblock %}
+{% block page_name %}review{% endblock %}
+
+{% block content %}
+  <div class="review-shell">
+    <header class="review-header">
+      <div>
+        <a class="back-link" href="{{ url_for('index') }}">← 文字起こし入力に戻る</a>
+        <p class="eyebrow">Review before sending</p>
+        <h1>送信前確認</h1>
+        <p>AIが整理した内容です。誤りや社外に共有できない情報がないか、必ず確認してください。</p>
+      </div>
+      <div class="review-progress" aria-label="現在のステップ">
+        <span class="progress-done">入力</span>
+        <span class="progress-line"></span>
+        <span class="progress-current">確認・編集</span>
+        <span class="progress-line"></span>
+        <span>送信</span>
+      </div>
+    </header>
+
+    {% if result.is_demo %}
+      <div class="demo-banner" role="note">
+        <span aria-hidden="true">i</span>
+        <p><strong>画面確認用のサンプル結果です。</strong> AI Backend接続後は、実際の解析結果に置き換わります。</p>
+      </div>
+    {% endif %}
+
+    <div class="review-layout">
+      <div class="review-content">
+        <section class="content-card" aria-labelledby="minutes-title">
+          <div class="section-heading">
+            <div class="section-number" aria-hidden="true">01</div>
+            <div>
+              <p class="section-kicker">External minutes</p>
+              <h2 id="minutes-title">議事録</h2>
+            </div>
+            <span class="editable-badge">編集できます</span>
+          </div>
+          <label class="visually-hidden" for="external-minutes">社外向け議事録</label>
+          <textarea id="external-minutes" class="editor editor-minutes" rows="10">{{ result.external_minutes }}</textarea>
+        </section>
+
+        <section class="content-card" aria-labelledby="decisions-title">
+          <div class="section-heading">
+            <div class="section-number" aria-hidden="true">02</div>
+            <div>
+              <p class="section-kicker">Decisions</p>
+              <h2 id="decisions-title">決定事項</h2>
+            </div>
+          </div>
+          {% if result.decisions %}
+            <ul class="decision-list">
+              {% for decision in result.decisions %}
+                <li><span aria-hidden="true">✓</span><p>{{ decision }}</p></li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="empty-state">決定事項は検出されませんでした。</p>
+          {% endif %}
+        </section>
+
+        <section class="content-card" aria-labelledby="todos-title">
+          <div class="section-heading">
+            <div class="section-number" aria-hidden="true">03</div>
+            <div>
+              <p class="section-kicker">Action items</p>
+              <h2 id="todos-title">ToDo</h2>
+            </div>
+          </div>
+          {% if result.action_items %}
+            <div class="todo-table-wrap">
+              <table class="todo-table">
+                <thead><tr><th>内容</th><th>担当者</th><th>期限</th></tr></thead>
+                <tbody>
+                  {% for item in result.action_items %}
+                    <tr>
+                      <td data-label="内容">{{ item.task or '未設定' }}</td>
+                      <td data-label="担当者"><span class="person-chip">{{ item.assignee or '未設定' }}</span></td>
+                      <td data-label="期限"><span class="{% if not item.deadline or item.deadline == '未確定' %}uncertain{% endif %}">{{ item.deadline or '未設定' }}</span></td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p class="empty-state">ToDoは検出されませんでした。</p>
+          {% endif %}
+        </section>
+
+        {% if result.warnings %}
+          <section class="content-card warning-card" aria-labelledby="warnings-title">
+            <div class="section-heading">
+              <div class="warning-mark" aria-hidden="true">!</div>
+              <div>
+                <p class="section-kicker">Check required</p>
+                <h2 id="warnings-title">注意・警告</h2>
+              </div>
+            </div>
+            <ul class="warning-list">
+              {% for warning in result.warnings %}
+                <li>{{ warning }}</li>
+              {% endfor %}
+            </ul>
+          </section>
+        {% endif %}
+
+        {% if result.next_meeting and result.next_meeting.detected %}
+          <section class="content-card meeting-card" aria-labelledby="meeting-title">
+            <div class="section-heading">
+              <div class="section-number" aria-hidden="true">04</div>
+              <div>
+                <p class="section-kicker">Next meeting</p>
+                <h2 id="meeting-title">次回会議</h2>
+              </div>
+            </div>
+            <div class="meeting-summary">
+              <div class="calendar-date" aria-hidden="true">
+                <span>{{ result.next_meeting.date[5:7] if result.next_meeting.date else '--' }}月</span>
+                <strong>{{ result.next_meeting.date[8:10] if result.next_meeting.date else '--' }}</strong>
+              </div>
+              <div class="meeting-details">
+                <h3>{{ result.next_meeting.title or 'タイトル未設定' }}</h3>
+                {% if result.next_meeting.date_confirmed %}
+                  <p>{{ result.next_meeting.date }}<span aria-hidden="true"> · </span>{{ result.next_meeting.start_time }}〜{{ result.next_meeting.end_time }}</p>
+                {% else %}
+                  <p class="meeting-warning">次回会議への言及がありますが、日時が確定していません。</p>
+                {% endif %}
+              </div>
+              {% if result.next_meeting.date_confirmed and result.next_meeting.calendar_url %}
+                <a class="secondary-button" href="{{ result.next_meeting.calendar_url }}" target="_blank" rel="noopener noreferrer">
+                  Google Calendarに追加
+                  <span aria-hidden="true">↗</span>
+                </a>
+              {% endif %}
+            </div>
+          </section>
+        {% endif %}
+
+        <section class="content-card email-card" aria-labelledby="email-title">
+          <div class="section-heading">
+            <div class="section-number" aria-hidden="true">05</div>
+            <div>
+              <p class="section-kicker">Follow-up email</p>
+              <h2 id="email-title">メール</h2>
+            </div>
+            <span class="editable-badge">編集できます</span>
+          </div>
+          <div class="email-form">
+            <div class="field-group">
+              <label for="email-to">宛先</label>
+              <input id="email-to" type="email" value="{{ result.email.to }}" placeholder="partner@example.com" autocomplete="email">
+            </div>
+            <div class="field-group">
+              <label for="email-subject">件名</label>
+              <input id="email-subject" type="text" value="{{ result.email.subject }}">
+            </div>
+            <div class="field-group">
+              <div class="field-label-row">
+                <label for="email-body">メール本文</label>
+                <span id="email-character-count">0文字</span>
+              </div>
+              <textarea id="email-body" class="editor" rows="15">{{ result.email.body }}</textarea>
+            </div>
+          </div>
+          <div class="email-actions">
+            <button id="copy-email" class="outline-button" type="button">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+              <span id="copy-button-label">メール本文をコピー</span>
+            </button>
+            <button class="primary-button send-button" type="button" disabled aria-describedby="send-help">
+              メールを送信
+            </button>
+          </div>
+          <p id="copy-status" class="copy-status" role="status" aria-live="polite"></p>
+          <p id="send-help" class="send-help">Gmail連携後に送信できるようになります。現在はコピーしてご利用ください。</p>
+        </section>
+      </div>
+
+      <aside class="review-aside" aria-label="確認状況">
+        <div class="aside-card">
+          <p class="aside-label">確認ポイント</p>
+          <ul>
+            <li><span>1</span>議事録に誤りがない</li>
+            <li><span>2</span>警告箇所を確認した</li>
+            <li><span>3</span>宛先・件名を確認した</li>
+          </ul>
+          <div class="human-check">
+            <span aria-hidden="true">✓</span>
+            <p><strong>自動送信されません</strong><br>あなたの確認後に送信します。</p>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+{% endblock %}
