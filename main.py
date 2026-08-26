@@ -7,6 +7,7 @@ import secrets
 import sqlite3
 from email.message import EmailMessage
 from email.utils import parseaddr
+from functools import wraps
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
@@ -14,6 +15,7 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
+from google.oauth2 import id_token as google_id_token
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
@@ -35,6 +37,8 @@ app = Flask(__name__)
 app.config.update(
     MAX_CONTENT_LENGTH=1 * 1024 * 1024,
     SECRET_KEY=os.getenv("FLASK_SECRET_KEY", secrets.token_urlsafe(32)),
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
     GOOGLE_OAUTH_REDIRECT_URI=os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "http://localhost:5001/oauth2callback"),
 )
 
@@ -43,6 +47,12 @@ init_db(app)
 
 ALLOWED_EXTENSIONS = {".txt"}
 GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
+OAUTH_SCOPES = [
+    "openid",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
+    GMAIL_SEND_SCOPE,
+]
 _redirect_host = urlparse(app.config["GOOGLE_OAUTH_REDIRECT_URI"]).hostname
 if _redirect_host in {"localhost", "127.0.0.1", "::1"}:
     os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")
@@ -66,7 +76,7 @@ def oauth_client_config() -> dict:
 
 
 def create_oauth_flow(state: str | None = None, code_verifier: str | None = None) -> Flow:
-    return Flow.from_client_config(oauth_client_config(), scopes=[GMAIL_SEND_SCOPE], state=state,
+    return Flow.from_client_config(oauth_client_config(), scopes=OAUTH_SCOPES, state=state,
                                    code_verifier=code_verifier,
                                    redirect_uri=app.config["GOOGLE_OAUTH_REDIRECT_URI"])
 
@@ -100,12 +110,14 @@ def get_credentials() -> Credentials | None:
         row = connection.execute("SELECT token_json FROM oauth_tokens WHERE session_id = ?", (token_id,)).fetchone()
     if not row:
         return None
-    credentials = Credentials.from_authorized_user_info(json.loads(row[0]), [GMAIL_SEND_SCOPE])
+    credentials = Credentials.from_authorized_user_info(json.loads(row[0]), OAUTH_SCOPES)
     if credentials.expired and credentials.refresh_token:
         try:
             credentials.refresh(Request())
         except RefreshError:
             clear_credentials()
+            session.pop("user_email", None)
+            session.pop("user_name", None)
             return None
         save_credentials(credentials)
     return credentials if credentials.valid else None
@@ -113,6 +125,34 @@ def get_credentials() -> Credentials | None:
 
 def is_gmail_connected() -> bool:
     return get_credentials() is not None
+
+
+def is_logged_in() -> bool:
+    return bool(session.get("user_email"))
+
+
+def login_required(view):
+    @wraps(view)
+    def wrapped_view(*args, **kwargs):
+        if is_logged_in():
+            return view(*args, **kwargs)
+        if (
+            request.path.startswith("/api/")
+            or request.args.get("format") == "json"
+            or request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        ):
+            return jsonify({"error": "ログインが必要です"}), 401
+        return redirect(url_for("index"))
+
+    return wrapped_view
+
+
+@app.context_processor
+def inject_current_user() -> dict:
+    return {
+        "current_user_email": session.get("user_email"),
+        "current_user_name": session.get("user_name"),
+    }
 
 
 def send_follow_up_email(recipient: str, subject: str, body: str) -> None:
@@ -214,10 +254,13 @@ def run_ai_analysis(transcript: str) -> dict:
 # --- 4. Flask ルーティング ---
 @app.get("/")
 def index():
+    if not is_logged_in():
+        return render_template("login.html")
     return render_template("index.html", error=None, transcript="")
 
 
 @app.post("/analyze")
+@login_required
 def analyze():
     transcript, error = read_transcript()
     if error or not transcript:
@@ -272,20 +315,34 @@ def oauth2callback():
     try:
         flow = create_oauth_flow(state, code_verifier)
         flow.fetch_token(authorization_response=request.url, include_client_id=True)
+        id_info = google_id_token.verify_oauth2_token(
+            flow.credentials.id_token,
+            Request(),
+            oauth_client_config()["web"]["client_id"],
+        )
+        if not id_info.get("email") or not id_info.get("email_verified"):
+            raise ValueError("Googleアカウントのメールアドレスを確認できませんでした。")
         save_credentials(flow.credentials)
+        session["user_email"] = id_info["email"]
+        session["user_name"] = id_info.get("name") or id_info["email"]
     except Exception as error:
         app.logger.exception("Unable to complete Google OAuth")
         return render_template("email_status.html", success=False, message=f"Google連携を完了できませんでした（{type(error).__name__}）。"), 502
-    return render_template("email_status.html", success=True, message="Googleアカウントを連携しました。メール送信が利用できます。", recipient=None)
+    return redirect(url_for("index"))
 
 
 @app.post("/google/disconnect")
 def google_disconnect():
     clear_credentials()
+    session.pop("user_email", None)
+    session.pop("user_name", None)
+    session.pop("oauth_state", None)
+    session.pop("oauth_code_verifier", None)
     return redirect(url_for("index"))
 
 
 @app.post("/send-email")
+@login_required
 def send_email():
     recipient = request.form.get("email_to", "").strip()
     subject = request.form.get("email_subject", "").strip()
@@ -309,6 +366,7 @@ def send_email():
 # =====================================================================
 
 @app.get("/meetings")
+@login_required
 def list_meetings():
     """履歴一覧を取得（JSON返却 または HTML描画）"""
     meetings = get_all_meetings()
@@ -321,6 +379,7 @@ def list_meetings():
 
 
 @app.get("/meetings/<int:meeting_id>")
+@login_required
 def get_meeting(meeting_id: int):
     """特定の会議詳細を取得"""
     meeting = get_meeting_by_id(meeting_id)
@@ -334,6 +393,7 @@ def get_meeting(meeting_id: int):
 
 
 @app.delete("/api/meetings/<int:meeting_id>")
+@login_required
 def api_delete_meeting(meeting_id: int):
     """特定会議データの削除API"""
     success = delete_meeting(meeting_id)
