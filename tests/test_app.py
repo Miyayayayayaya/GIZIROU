@@ -1,5 +1,6 @@
 import io
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from main import app
@@ -9,6 +10,23 @@ class FrontendFlowTest(unittest.TestCase):
     def setUp(self):
         app.config.update(TESTING=True)
         self.client = app.test_client()
+        self.analysis_patcher = patch(
+            "main.run_ai_analysis",
+            return_value={
+                "external_minutes": "議事録",
+                "decisions": [],
+                "action_items": [],
+                "warnings": [],
+                "next_meeting": {"detected": True, "date_confirmed": True, "title": "進捗確認会", "date": "2026-09-03", "start_time": "14:00", "end_time": "15:00", "calendar_url": "https://calendar.google.com"},
+                "email": {"to": "", "subject": "件名", "body": "本文"},
+                "is_demo": False,
+            },
+        )
+        self.analysis_patcher.start()
+        self.addCleanup(self.analysis_patcher.stop)
+        self.save_patcher = patch("main.save_meeting", return_value=SimpleNamespace(id=1))
+        self.save_patcher.start()
+        self.addCleanup(self.save_patcher.stop)
 
     def test_input_page_renders(self):
         response = self.client.get("/")
@@ -25,6 +43,7 @@ class FrontendFlowTest(unittest.TestCase):
         body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
         self.assertIn("送信前確認", body)
+        self.assertNotIn('id="todos-title"', body)
         self.assertIn("Google Calendarに追加", body)
         self.assertIn("メール本文をコピー", body)
 
@@ -64,7 +83,7 @@ class FrontendFlowTest(unittest.TestCase):
             "email": {"to": "", "subject": "件名", "body": "本文"},
             "is_demo": False,
         }
-        with patch("main.build_demo_analysis", return_value=result):
+        with patch("main.run_ai_analysis", return_value=result):
             response = self.client.post("/analyze", data={"transcript": "来週またやりましょう"})
         body = response.get_data(as_text=True)
         self.assertIn("日時が確定していません", body)
@@ -80,7 +99,7 @@ class FrontendFlowTest(unittest.TestCase):
             "email": {"to": "", "subject": "件名", "body": "本文"},
             "is_demo": False,
         }
-        with patch("main.build_demo_analysis", return_value=result):
+        with patch("main.run_ai_analysis", return_value=result):
             response = self.client.post("/analyze", data={"transcript": "本日はありがとうございました"})
         body = response.get_data(as_text=True)
         self.assertNotIn("次回会議</h2>", body)
