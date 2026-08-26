@@ -105,6 +105,60 @@ class FrontendFlowTest(unittest.TestCase):
         self.assertNotIn("次回会議</h2>", body)
         self.assertNotIn("Google Calendarに追加", body)
 
+    def test_review_page_has_multiple_recipient_editor(self):
+        response = self.client.post("/analyze", data={"transcript": "会議の文字起こし"})
+        body = response.get_data(as_text=True)
+        self.assertIn('id="email-to-input"', body)
+        self.assertIn('id="email-cc-input"', body)
+        self.assertIn('id="email-to-list"', body)
+        self.assertIn('id="email-cc-list"', body)
+
+    @patch("main.send_follow_up_email")
+    @patch("main.is_gmail_connected", return_value=True)
+    def test_send_email_accepts_multiple_to_and_cc(self, _connected, send_mock):
+        response = self.client.post(
+            "/send-email",
+            data={
+                "email_to": ["user1@example.com", "user2@example.com"],
+                "email_cc": ["manager@example.com"],
+                "email_subject": "件名",
+                "email_body": "本文",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        send_mock.assert_called_once_with(
+            ["user1@example.com", "user2@example.com"],
+            "件名",
+            "本文",
+            ["manager@example.com"],
+        )
+
+    @patch("main.is_gmail_connected", return_value=True)
+    def test_send_email_rejects_duplicate_recipient(self, _connected):
+        response = self.client.post(
+            "/send-email",
+            data={
+                "email_to": ["user@example.com"],
+                "email_cc": ["USER@example.com"],
+                "email_subject": "件名",
+                "email_body": "本文",
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("重複のない正しい宛先", response.get_data(as_text=True))
+
+    @patch("main.is_gmail_connected", return_value=True)
+    def test_send_email_requires_at_least_one_to_recipient(self, _connected):
+        response = self.client.post(
+            "/send-email",
+            data={
+                "email_cc": ["manager@example.com"],
+                "email_subject": "件名",
+                "email_body": "本文",
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+
 
 if __name__ == "__main__":
     unittest.main()

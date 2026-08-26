@@ -115,12 +115,14 @@ def is_gmail_connected() -> bool:
     return get_credentials() is not None
 
 
-def send_follow_up_email(recipient: str, subject: str, body: str) -> None:
+def send_follow_up_email(recipients: list[str], subject: str, body: str, cc_recipients: list[str] | None = None) -> None:
     credentials = get_credentials()
     if not credentials:
         raise RuntimeError("Googleアカウントの連携が必要です。")
     message = EmailMessage()
-    message["To"] = recipient
+    message["To"] = ", ".join(recipients)
+    if cc_recipients:
+        message["Cc"] = ", ".join(cc_recipients)
     message["Subject"] = subject
     message.set_content(body)
     raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
@@ -287,22 +289,33 @@ def google_disconnect():
 
 @app.post("/send-email")
 def send_email():
-    recipient = request.form.get("email_to", "").strip()
+    recipients = [address.strip() for address in request.form.getlist("email_to") if address.strip()]
+    cc_recipients = [address.strip() for address in request.form.getlist("email_cc") if address.strip()]
     subject = request.form.get("email_subject", "").strip()
     body = request.form.get("email_body", "").strip()
-    if not is_valid_email(recipient) or not subject or not body:
-        return render_template("email_status.html", success=False, message="宛先、件名、メール本文を正しく入力してください。"), 400
+    all_recipients = recipients + cc_recipients
+    normalized_recipients = [address.casefold() for address in all_recipients]
+    has_duplicate = len(normalized_recipients) != len(set(normalized_recipients))
+    if not recipients or not all(is_valid_email(address) for address in all_recipients) or has_duplicate or not subject or not body:
+        return render_template(
+            "email_status.html",
+            success=False,
+            message="Toを1件以上追加し、重複のない正しい宛先、件名、メール本文を入力してください。",
+        ), 400
     if not is_gmail_connected():
         return render_template("email_status.html", success=False, message="メール送信にはGoogleアカウントの連携が必要です。", connect_url=url_for("google_connect")), 401
     try:
-        send_follow_up_email(recipient, subject, body)
+        send_follow_up_email(recipients, subject, body, cc_recipients)
     except HttpError:
         app.logger.exception("Gmail API rejected send request")
         return render_template("email_status.html", success=False, message="Gmail APIでメールを送信できませんでした。連携をやり直してください。"), 502
     except (OSError, RuntimeError):
         app.logger.exception("Unable to send follow-up email")
         return render_template("email_status.html", success=False, message="メールを送信できませんでした。ネットワーク接続を確認してください。"), 502
-    return render_template("email_status.html", success=True, recipient=recipient)
+    recipient_summary = f"To: {', '.join(recipients)}"
+    if cc_recipients:
+        recipient_summary += f" / CC: {', '.join(cc_recipients)}"
+    return render_template("email_status.html", success=True, recipient=recipient_summary)
 
 # =====================================================================
 # SQLite データベース用 (履歴一覧・詳細表示・削除) ルーティング
