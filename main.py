@@ -94,9 +94,14 @@ def run_ai_analysis(transcript: str) -> dict:
     calendar_url = build_calendar_url(result["next_meeting"])
     result["next_meeting"]["calendar_url"] = calendar_url
 
-    # メール本文にカレンダーURLが含まれていれば反映補助
-    if calendar_url and result.get("email") and "{calendar_url}" in result["email"].get("body", ""):
-        result["email"]["body"] = result["email"]["body"].replace("{calendar_url}", calendar_url)
+    # 日時が確定している場合は、メール本文にもカレンダーURLを必ず1回だけ追加する
+    if calendar_url and result.get("email"):
+        email_body = result["email"].get("body", "")
+        if "{calendar_url}" in email_body:
+            result["email"]["body"] = email_body.replace("{calendar_url}", calendar_url)
+        elif calendar_url not in email_body:
+            calendar_section = f"Google Calendarに追加：\n{calendar_url}"
+            result["email"]["body"] = f"{email_body.rstrip()}\n\n{calendar_section}".lstrip()
 
     # UI用補助データ
     result["source_excerpt"] = " ".join(transcript.split())[:120]
