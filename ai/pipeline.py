@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+
 from .config import DEFAULT_MODEL
 from .email_draft import generate_followup_email
 from .extraction import extract_meeting_data
@@ -27,8 +29,13 @@ def analyze_transcript(raw_notes: str, *, model: str = DEFAULT_MODEL) -> dict:
     fields are None rather than guessed.
     """
     extracted = extract_meeting_data(raw_notes, model=model)
-    minutes = generate_minutes(extracted, model=model)
-    email = generate_followup_email(extracted, model=model)
+    
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        future_minutes = executor.submit(generate_minutes, extracted, model=model)
+        future_email = executor.submit(generate_followup_email, extracted, model=model)
+        
+        minutes = future_minutes.result()
+        email = future_email.result()
 
     return {
         "external_minutes": minutes.external_body,

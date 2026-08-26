@@ -1,7 +1,7 @@
 import time
 from functools import lru_cache
 
-from openai import APIError, OpenAI, RateLimitError
+from openai import APIConnectionError, APIError, APITimeoutError, OpenAI, RateLimitError
 
 from .config import get_api_key
 
@@ -21,7 +21,7 @@ def call_with_retry(fn, *args, **kwargs):
     for attempt in range(MAX_RETRIES + 1):
         try:
             return fn(*args, **kwargs)
-        except (RateLimitError, APIError) as exc:
+        except (RateLimitError, APIError, APIConnectionError, APITimeoutError) as exc:
             last_error = exc
             if attempt < MAX_RETRIES:
                 time.sleep(RETRY_DELAY_SECONDS)

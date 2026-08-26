@@ -28,7 +28,4 @@ def extract_meeting_data(raw_notes: str, *, model: str = DEFAULT_MODEL) -> Extra
     if parsed is None:
         raise ExtractionError("Model refused to produce structured output")
 
-    try:
-        return ExtractedMeetingData.model_validate(parsed.model_dump())
-    except ValidationError as exc:
-        raise ExtractionError(f"Extracted data failed schema validation: {exc}") from exc
+    return parsed
