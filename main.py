@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from urllib.parse import urlencode
 
+from dotenv import load_dotenv
 from flask import Flask, render_template, request
+from langchain_openai import ChatOpenAI
+from pydantic import BaseModel, Field
 
+load_dotenv()
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024
@@ -12,6 +17,38 @@ app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024
 ALLOWED_EXTENSIONS = {".txt"}
 
 
+# --- 1. LLM出力用 Pydantic スキーマ定義 ---
+class ActionItem(BaseModel):
+    task: str = Field(description="タスク内容")
+    assignee: str = Field(description="担当者。不明な場合は'未確定'")
+    deadline: str = Field(description="期限。不明な場合は'未確定'")
+
+
+class NextMeeting(BaseModel):
+    detected: bool = Field(description="次回会議の記述や話題が存在するかどうか")
+    date_confirmed: bool = Field(description="次回会議の「日付」と「開始時間」が確定しているかどうか")
+    title: str = Field(default="次回会議", description="次回会議のタイトル")
+    date: str = Field(default="", description="YYYY-MM-DD形式。不明なら空文字")
+    start_time: str = Field(default="", description="HH:MM形式（24時間表記）。不明なら空文字")
+    end_time: str = Field(default="", description="HH:MM形式（24時間表記）。不明なら空文字")
+
+
+class Email(BaseModel):
+    to: str = Field(default="", description="送信先メールアドレス。不明なら空文字")
+    subject: str = Field(description="件名")
+    body: str = Field(description="メール本文")
+
+
+class AnalysisOutput(BaseModel):
+    external_minutes: str = Field(description="社外・チーム共有用の要約・議事録テキスト")
+    decisions: list[str] = Field(description="会議で決定した事項のリスト")
+    action_items: list[ActionItem] = Field(description="アクションアイテムのリスト")
+    warnings: list[str] = Field(description="期限の曖昧さ、未確定要素、機密情報等の警告・注意事項")
+    next_meeting: NextMeeting
+    email: Email
+
+
+# --- 2. 文字起こしファイル/テキスト読み込み処理 ---
 def read_transcript() -> tuple[str, str | None]:
     """Return submitted transcript text without saving the uploaded file."""
     pasted_text = request.form.get("transcript", "").strip()
@@ -33,75 +70,85 @@ def read_transcript() -> tuple[str, str | None]:
         return "", "ファイルを読み込めませんでした。UTF-8形式のtxtファイルを選択してください。"
 
 
-def build_calendar_url() -> str:
-    """Build sample URL in Backend; replace inputs with extracted meeting data."""
+# --- 3. Google Calendar URL 生成関数 ---
+def build_calendar_url(next_meeting: dict) -> str:
+    """detected: True, date_confirmed: True かつ日時情報が存在する場合のみカレンダーURLを生成"""
+    if not (next_meeting.get("detected") and next_meeting.get("date_confirmed")):
+        return ""
+
+    date_str = next_meeting.get("date", "").replace("-", "")
+    start_time_str = next_meeting.get("start_time", "").replace(":", "")
+    end_time_str = next_meeting.get("end_time", "").replace(":", "")
+
+    # 日付と開始時刻が無い場合は生成不可
+    if not date_str or not start_time_str:
+        return ""
+
+    # 終了時刻が無い場合は開始時刻から1時間後に設定
+    if not end_time_str:
+        try:
+            start_hour = int(start_time_str[:2])
+            end_time_str = f"{(start_hour + 1) % 24:02d}{start_time_str[2:]}"
+        except ValueError:
+            end_time_str = start_time_str
+
+    start_iso = f"{date_str}T{start_time_str}00"
+    end_iso = f"{date_str}T{end_time_str}00"
+
     query = urlencode(
         {
             "action": "TEMPLATE",
-            "text": "進捗確認会",
-            "dates": "20260903T140000/20260903T150000",
-            "details": "前回会議の進捗確認",
+            "text": next_meeting.get("title") or "次回会議",
+            "dates": f"{start_iso}/{end_iso}",
             "ctz": "Asia/Tokyo",
         }
     )
     return f"https://calendar.google.com/calendar/render?{query}"
 
 
-def build_demo_analysis(transcript: str) -> dict:
-    """Temporary UI data until the AI service is connected by Backend/AI teams."""
+# --- 4. AIによる実解析処理 ---
+def run_ai_analysis(transcript: str) -> dict:
+    """OpenAI API（LangChain Structured Output）を呼び出して議事録を解析"""
+    # OpenAI APIキーの存在チェック
+    if not os.getenv("OPENAI_API_KEY"):
+        raise ValueError("OPENAI_API_KEYが設定されていません。.envファイルを確認してください。")
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    structured_llm = llm.with_structured_output(AnalysisOutput)
+
+    prompt = f"""
+あなたは優秀な会議議事録アシスタントです。
+以下の文字起こしテキストを解析し、指定された形式で情報を抽出してください。
+
+【重要な制約事項】
+- 不明な担当者・期限・日時は決して推測せず、空値または「未確定」で返してください。
+- 次回会議の「日付」および「開始時間」が明示的に決まっていない場合は、next_meeting.date_confirmed を false にしてください。
+- 次回会議自体についての話題がない場合は、next_meeting.detected を false にしてください。
+
+【文字起こしテキスト】
+{transcript}
+"""
+
+    parsed_result: AnalysisOutput = structured_llm.invoke(prompt)
+    result_dict = parsed_result.model_dump()
+
+    # Backend側で Calendar URL を生成して埋め込み
+    calendar_url = build_calendar_url(result_dict["next_meeting"])
+    result_dict["next_meeting"]["calendar_url"] = calendar_url
+
+    # メール本文にカレンダーURLが含まれていれば反映補助（任意）
+    if calendar_url and "{calendar_url}" in result_dict["email"]["body"]:
+        result_dict["email"]["body"] = result_dict["email"]["body"].replace("{calendar_url}", calendar_url)
+
+    # UI用補助データ
     excerpt = " ".join(transcript.split())[:120]
-    calendar_url = build_calendar_url()
-    return {
-        "external_minutes": (
-            "本日はお打ち合わせのお時間をいただき、ありがとうございました。\n\n"
-            "新サービス導入に向けた進行方針を確認し、初回提案では対象部門を限定して"
-            "検証を開始することで合意しました。検証結果を踏まえ、次回会議で今後の"
-            "展開方針を協議します。"
-        ),
-        "decisions": [
-            "初回検証は営業部門を対象に実施する",
-            "検証結果を次回会議で共有し、展開方針を決定する",
-        ],
-        "action_items": [
-            {"task": "見積書と導入スケジュール案を送付する", "assignee": "田中", "deadline": "2026-09-01"},
-            {"task": "検証参加者を社内で確認する", "assignee": "佐藤", "deadline": "未確定"},
-        ],
-        "warnings": [
-            "「来週まで」という期限が曖昧です。具体的な日付を確認してください。",
-            "社内の原価情報が含まれていないか、送信前に確認してください。",
-        ],
-        "next_meeting": {
-            "detected": True,
-            "date_confirmed": True,
-            "title": "進捗確認会",
-            "date": "2026-09-03",
-            "start_time": "14:00",
-            "end_time": "15:00",
-            "calendar_url": calendar_url,
-        },
-        "email": {
-            "to": "",
-            "subject": "本日のお打ち合わせ内容と今後の進め方について",
-            "body": (
-                "ご担当者様\n\n"
-                "本日はお打ち合わせのお時間をいただき、ありがとうございました。\n"
-                "本日の決定事項と対応事項を、下記のとおり共有いたします。\n\n"
-                "【決定事項】\n"
-                "・初回検証は営業部門を対象に実施する\n\n"
-                "【対応事項】\n"
-                "・見積書と導入スケジュール案の送付（担当：田中、期限：2026-09-01）\n\n"
-                "【次回会議】\n"
-                "進捗確認会（2026-09-03 14:00〜15:00）\n"
-                f"Google Calendarに追加：{calendar_url}\n\n"
-                "内容をご確認いただき、認識違いなどございましたらお知らせください。\n"
-                "引き続きよろしくお願いいたします。"
-            ),
-        },
-        "source_excerpt": excerpt,
-        "is_demo": True,
-    }
+    result_dict["source_excerpt"] = excerpt
+    result_dict["is_demo"] = False
+
+    return result_dict
 
 
+# --- 5. Flask ルーティング ---
 @app.get("/")
 def index():
     return render_template("index.html", error=None, transcript="")
@@ -120,8 +167,21 @@ def analyze():
             400,
         )
 
-    return render_template("review.html", result=build_demo_analysis(transcript))
+    try:
+        # AI実処理の呼び出し
+        analysis_result = run_ai_analysis(transcript)
+        return render_template("review.html", result=analysis_result)
+    except Exception as e:
+        # API未設定やエラー時のフォールバック処理
+        return (
+            render_template(
+                "index.html",
+                error=f"解析エラーが発生しました: {str(e)}",
+                transcript=transcript,
+            ),
+            500,
+        )
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=8080, debug=True)
