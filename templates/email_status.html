@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Google連携・メール送信 | Meeting Follow-up AI{% endblock %}
+{% block content %}
+<section class="input-page" aria-labelledby="status-title"><div class="input-card">
+{% if success %}<p class="step-label">COMPLETE</p><h1 id="status-title">{% if recipient %}メールを送信しました{% else %}Google連携が完了しました{% endif %}</h1><p class="lead">{% if recipient %}{{ recipient }} 宛にフォローアップメールを送信しました。{% else %}{{ message }}{% endif %}</p>
+{% else %}<p class="step-label">ACTION REQUIRED</p><h1 id="status-title">処理を完了できませんでした</h1><div class="alert alert-error" role="alert"><span class="alert-icon" aria-hidden="true">!</span><p>{{ message }}</p></div>{% if connect_url %}<a class="primary-button" href="{{ connect_url }}">Googleで連携する</a>{% endif %}{% endif %}
+<a class="back-link" href="{{ url_for('index') }}">← 文字起こし入力に戻る</a>
+</div></section>
+{% endblock %}

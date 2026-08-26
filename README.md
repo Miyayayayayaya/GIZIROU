@@ -74,10 +74,21 @@ AIが生成した内容をそのまま自動送信することはありません
 - AIによる警告
 - 次回会議情報
 
-### 5. メール送信
+### 5. Gmail送信
 
-確認・承認後、Gmailを利用してフォローアップメールを送信します。
+確認・承認後、ユーザーがOAuthで連携したGoogleアカウントのGmailからフォローアップメールを送信します。
 
+#### Google OAuth設定
+
+`.env.example` を `.env` にコピーし、以下を設定してください。`.env`、Client Secret、認可トークンはGit管理しません。
+
+- `FLASK_SECRET_KEY`: 十分に長いランダム文字列
+- `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`: Google Auth Platformで作成したWeb applicationの認証情報
+- `GOOGLE_OAUTH_REDIRECT_URI`: Google Cloud Consoleに登録したリダイレクトURIと完全に一致するURL（ローカル開発では `http://localhost:5000/oauth2callback`）
+
+初回送信前に「Googleで連携」を選択して認可します。認可トークンはサーバー側の `instance/oauth_tokens.sqlite3` にのみ保存されます。
+
+ローカル開発では `http://localhost:5000` でアクセスしてください。`127.0.0.1` ではなく `localhost` を使うことで、Google Consoleに登録したコールバックURIとブラウザセッションが一致します。
 ## 処理フロー
 
 ```text
