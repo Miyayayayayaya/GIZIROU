@@ -62,34 +62,6 @@
           {% endif %}
         </section>
 
-        <section class="content-card" aria-labelledby="todos-title">
-          <div class="section-heading">
-            <div class="section-number" aria-hidden="true">03</div>
-            <div>
-              <p class="section-kicker">Action items</p>
-              <h2 id="todos-title">ToDo</h2>
-            </div>
-          </div>
-          {% if result.action_items %}
-            <div class="todo-table-wrap">
-              <table class="todo-table">
-                <thead><tr><th>内容</th><th>担当者</th><th>期限</th></tr></thead>
-                <tbody>
-                  {% for item in result.action_items %}
-                    <tr>
-                      <td data-label="内容">{{ item.task or '未設定' }}</td>
-                      <td data-label="担当者"><span class="person-chip">{{ item.assignee or '未設定' }}</span></td>
-                      <td data-label="期限"><span class="{% if not item.deadline or item.deadline == '未確定' %}uncertain{% endif %}">{{ item.deadline or '未設定' }}</span></td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-          {% else %}
-            <p class="empty-state">ToDoは検出されませんでした。</p>
-          {% endif %}
-        </section>
-
         {% if result.warnings %}
           <section class="content-card warning-card" aria-labelledby="warnings-title">
             <div class="section-heading">
@@ -110,7 +82,7 @@
         {% if result.next_meeting and result.next_meeting.detected %}
           <section class="content-card meeting-card" aria-labelledby="meeting-title">
             <div class="section-heading">
-              <div class="section-number" aria-hidden="true">04</div>
+              <div class="section-number" aria-hidden="true">03</div>
               <div>
                 <p class="section-kicker">Next meeting</p>
                 <h2 id="meeting-title">次回会議</h2>
@@ -141,7 +113,7 @@
 
         <section class="content-card email-card" aria-labelledby="email-title">
           <div class="section-heading">
-            <div class="section-number" aria-hidden="true">05</div>
+            <div class="section-number" aria-hidden="true">04</div>
             <div>
               <p class="section-kicker">Follow-up email</p>
               <h2 id="email-title">メール</h2>

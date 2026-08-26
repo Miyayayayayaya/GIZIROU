@@ -173,16 +173,6 @@ textarea[aria-invalid="true"] { border-color: var(--danger); box-shadow: 0 0 0 3
 .decision-list p { margin: 0; font-size: 14px; }
 .empty-state { margin: 0; padding: 18px; border-radius: 9px; background: var(--surface-soft); color: var(--muted); font-size: 13px; text-align: center; }
 
-.todo-table-wrap { overflow-x: auto; border: 1px solid #edf0ed; border-radius: 10px; background: #fff; }
-.todo-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.todo-table th { padding: 10px 12px; color: var(--muted); background: var(--surface-soft); font-size: 11px; text-align: left; }
-.todo-table th:first-child { border-radius: 8px 0 0 8px; }
-.todo-table th:last-child { border-radius: 0 8px 8px 0; }
-.todo-table td { padding: 15px 12px; border-bottom: 1px solid #edf0ed; vertical-align: middle; }
-.todo-table tbody tr:last-child td { border-bottom: 0; }
-.person-chip { padding: 4px 9px; border-radius: 999px; background: #edf0ee; white-space: nowrap; }
-.uncertain { color: var(--warning); font-weight: 700; }
-
 .warning-card { border-color: var(--warning-line); background: var(--warning-bg); }
 .warning-mark { color: #fff; background: #c68a20; }
 .warning-card .section-kicker { color: var(--warning); }
@@ -248,12 +238,6 @@ textarea[aria-invalid="true"] { border-color: var(--danger); box-shadow: 0 0 0 3
   .content-card { padding: 22px 18px; }
   .section-heading { align-items: flex-start; }
   .editable-badge { font-size: 10px; }
-  .todo-table, .todo-table tbody, .todo-table tr, .todo-table td { display: block; width: 100%; }
-  .todo-table thead { display: none; }
-  .todo-table tr { padding: 14px; border-bottom: 1px solid var(--line); }
-  .todo-table tr:last-child { border-bottom: 0; }
-  .todo-table td { padding: 4px 0; border: 0; display: grid; grid-template-columns: 74px 1fr; gap: 8px; }
-  .todo-table td::before { content: attr(data-label); color: var(--muted); font-size: 11px; }
   .meeting-summary { align-items: flex-start; flex-wrap: wrap; }
   .meeting-details { min-width: calc(100% - 78px); }
   .meeting-summary .secondary-button { width: 100%; }

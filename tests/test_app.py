@@ -25,6 +25,7 @@ class FrontendFlowTest(unittest.TestCase):
         body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
         self.assertIn("送信前確認", body)
+        self.assertNotIn('id="todos-title"', body)
         self.assertIn("Google Calendarに追加", body)
         self.assertIn("メール本文をコピー", body)
 
