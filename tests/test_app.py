@@ -1,9 +1,11 @@
 import io
 import unittest
+import base64
+from email import message_from_bytes
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from main import app
+from main import app, send_follow_up_email
 
 
 class FrontendFlowTest(unittest.TestCase):
@@ -158,6 +160,35 @@ class FrontendFlowTest(unittest.TestCase):
             },
         )
         self.assertEqual(response.status_code, 400)
+
+    @patch("main.is_gmail_connected", return_value=True)
+    def test_send_email_rejects_subject_with_line_break(self, _connected):
+        response = self.client.post(
+            "/send-email",
+            data={
+                "email_to": ["user@example.com"],
+                "email_subject": "件名\nBcc: other@example.com",
+                "email_body": "本文",
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+
+    @patch("main.build")
+    @patch("main.get_credentials", return_value=object())
+    def test_gmail_message_contains_multiple_to_and_cc_headers(self, _credentials, build_mock):
+        send_follow_up_email(
+            ["user1@example.com", "user2@example.com"],
+            "件名",
+            "本文",
+            ["manager@example.com"],
+        )
+
+        send_call = build_mock.return_value.users.return_value.messages.return_value.send
+        raw_message = send_call.call_args.kwargs["body"]["raw"]
+        decoded = base64.urlsafe_b64decode(raw_message.encode("ascii"))
+        message = message_from_bytes(decoded)
+        self.assertEqual(message["To"], "user1@example.com, user2@example.com")
+        self.assertEqual(message["Cc"], "manager@example.com")
 
 
 if __name__ == "__main__":

@@ -296,7 +296,8 @@ def send_email():
     all_recipients = recipients + cc_recipients
     normalized_recipients = [address.casefold() for address in all_recipients]
     has_duplicate = len(normalized_recipients) != len(set(normalized_recipients))
-    if not recipients or not all(is_valid_email(address) for address in all_recipients) or has_duplicate or not subject or not body:
+    has_invalid_subject = "\r" in subject or "\n" in subject
+    if not recipients or not all(is_valid_email(address) for address in all_recipients) or has_duplicate or not subject or has_invalid_subject or not body:
         return render_template(
             "email_status.html",
             success=False,
@@ -309,7 +310,7 @@ def send_email():
     except HttpError:
         app.logger.exception("Gmail API rejected send request")
         return render_template("email_status.html", success=False, message="Gmail APIでメールを送信できませんでした。連携をやり直してください。"), 502
-    except (OSError, RuntimeError):
+    except (OSError, RuntimeError, ValueError):
         app.logger.exception("Unable to send follow-up email")
         return render_template("email_status.html", success=False, message="メールを送信できませんでした。ネットワーク接続を確認してください。"), 502
     recipient_summary = f"To: {', '.join(recipients)}"
