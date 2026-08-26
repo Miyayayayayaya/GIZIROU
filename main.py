@@ -5,14 +5,26 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 from dotenv import load_dotenv
-from flask import Flask, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request, url_for
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
+
+# --- database.py から関数・オブジェクトをインポート ---
+from database import (
+    delete_meeting,
+    get_all_meetings,
+    get_meeting_by_id,
+    init_db,
+    save_meeting,
+)
 
 load_dotenv()
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024
+
+# データベースの初期化（sqlite:///gizirou.db を作成/接続）
+init_db(app)
 
 ALLOWED_EXTENSIONS = {".txt"}
 
@@ -109,7 +121,6 @@ def build_calendar_url(next_meeting: dict) -> str:
 # --- 4. AIによる実解析処理 ---
 def run_ai_analysis(transcript: str) -> dict:
     """OpenAI API（LangChain Structured Output）を呼び出して議事録を解析"""
-    # OpenAI APIキーの存在チェック
     if not os.getenv("OPENAI_API_KEY"):
         raise ValueError("OPENAI_API_KEYが設定されていません。.envファイルを確認してください。")
 
@@ -136,7 +147,7 @@ def run_ai_analysis(transcript: str) -> dict:
     calendar_url = build_calendar_url(result_dict["next_meeting"])
     result_dict["next_meeting"]["calendar_url"] = calendar_url
 
-    # メール本文にカレンダーURLが含まれていれば反映補助（任意）
+    # メール本文にカレンダーURLが含まれていれば反映補助
     if calendar_url and "{calendar_url}" in result_dict["email"]["body"]:
         result_dict["email"]["body"] = result_dict["email"]["body"].replace("{calendar_url}", calendar_url)
 
@@ -170,9 +181,13 @@ def analyze():
     try:
         # AI実処理の呼び出し
         analysis_result = run_ai_analysis(transcript)
+        
+        # ★ SQLite データベースに解析結果と文字起こし原文を自動保存
+        saved_meeting = save_meeting(analysis_result, transcript)
+        analysis_result["id"] = saved_meeting.id
+
         return render_template("review.html", result=analysis_result)
     except Exception as e:
-        # API未設定やエラー時のフォールバック処理
         return (
             render_template(
                 "index.html",
@@ -181,6 +196,45 @@ def analyze():
             ),
             500,
         )
+
+
+# =====================================================================
+# SQLite データベース用 (履歴一覧・詳細表示・削除) ルーティング
+# =====================================================================
+
+@app.get("/meetings")
+def list_meetings():
+    """履歴一覧を取得（JSON返却 または HTML描画）"""
+    meetings = get_all_meetings()
+    
+    # API(JSON)リクエスト、またはクエリパラメータ format=json の場合
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest" or request.args.get("format") == "json":
+        return jsonify([m.to_dict() for m in meetings])
+        
+    return render_template("history.html", meetings=[m.to_dict() for m in meetings])
+
+
+@app.get("/meetings/<int:meeting_id>")
+def get_meeting(meeting_id: int):
+    """特定の会議詳細を取得"""
+    meeting = get_meeting_by_id(meeting_id)
+    if not meeting:
+        return jsonify({"error": "指定された議事録が見つかりません"}), 404
+
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest" or request.args.get("format") == "json":
+        return jsonify(meeting.to_dict())
+
+    return render_template("review.html", result=meeting.to_dict())
+
+
+@app.delete("/api/meetings/<int:meeting_id>")
+def api_delete_meeting(meeting_id: int):
+    """特定会議データの削除API"""
+    success = delete_meeting(meeting_id)
+    if not success:
+        return jsonify({"error": "削除対象が見つかりませんでした"}), 404
+        
+    return jsonify({"message": "正常に削除されました", "id": meeting_id}), 200
 
 
 if __name__ == "__main__":
