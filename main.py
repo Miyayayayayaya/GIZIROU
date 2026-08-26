@@ -1,10 +1,23 @@
 from __future__ import annotations
 
+import base64
+import json
+import os
+import secrets
+import sqlite3
+from email.message import EmailMessage
+from email.utils import parseaddr
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, redirect, render_template, request, url_for
+from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from google.auth.exceptions import RefreshError
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import Flow
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from ai import analyze_transcript
 
 # --- database.py から関数・オブジェクトをインポート ---
@@ -19,12 +32,100 @@ from database import (
 load_dotenv()
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024
+app.config.update(
+    MAX_CONTENT_LENGTH=1 * 1024 * 1024,
+    SECRET_KEY=os.getenv("FLASK_SECRET_KEY", secrets.token_urlsafe(32)),
+    GOOGLE_OAUTH_REDIRECT_URI=os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "http://localhost:5000/oauth2callback"),
+)
 
 # データベースの初期化（sqlite:///gizirou.db を作成/接続）
 init_db(app)
 
 ALLOWED_EXTENSIONS = {".txt"}
+GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
+_redirect_host = urlparse(app.config["GOOGLE_OAUTH_REDIRECT_URI"]).hostname
+if _redirect_host in {"localhost", "127.0.0.1", "::1"}:
+    os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")
+
+
+def is_valid_email(address: str) -> bool:
+    _, parsed_address = parseaddr(address)
+    return parsed_address == address and "@" in address and "." in address.rsplit("@", 1)[-1]
+
+
+def oauth_client_config() -> dict:
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        raise RuntimeError("Google OAuthの設定が完了していません。")
+    return {"web": {"client_id": client_id, "client_secret": client_secret,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                    "redirect_uris": [app.config["GOOGLE_OAUTH_REDIRECT_URI"]]}}
+
+
+def create_oauth_flow(state: str | None = None, code_verifier: str | None = None) -> Flow:
+    return Flow.from_client_config(oauth_client_config(), scopes=[GMAIL_SEND_SCOPE], state=state,
+                                   code_verifier=code_verifier,
+                                   redirect_uri=app.config["GOOGLE_OAUTH_REDIRECT_URI"])
+
+
+def token_database() -> sqlite3.Connection:
+    Path(app.instance_path).mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(Path(app.instance_path) / "oauth_tokens.sqlite3")
+    connection.execute("CREATE TABLE IF NOT EXISTS oauth_tokens (session_id TEXT PRIMARY KEY, token_json TEXT NOT NULL)")
+    return connection
+
+
+def save_credentials(credentials: Credentials) -> None:
+    token_id = session.get("oauth_token_id") or secrets.token_urlsafe(32)
+    session["oauth_token_id"] = token_id
+    with token_database() as connection:
+        connection.execute("INSERT OR REPLACE INTO oauth_tokens (session_id, token_json) VALUES (?, ?)", (token_id, credentials.to_json()))
+
+
+def clear_credentials() -> None:
+    token_id = session.pop("oauth_token_id", None)
+    if token_id:
+        with token_database() as connection:
+            connection.execute("DELETE FROM oauth_tokens WHERE session_id = ?", (token_id,))
+
+
+def get_credentials() -> Credentials | None:
+    token_id = session.get("oauth_token_id")
+    if not token_id:
+        return None
+    with token_database() as connection:
+        row = connection.execute("SELECT token_json FROM oauth_tokens WHERE session_id = ?", (token_id,)).fetchone()
+    if not row:
+        return None
+    credentials = Credentials.from_authorized_user_info(json.loads(row[0]), [GMAIL_SEND_SCOPE])
+    if credentials.expired and credentials.refresh_token:
+        try:
+            credentials.refresh(Request())
+        except RefreshError:
+            clear_credentials()
+            return None
+        save_credentials(credentials)
+    return credentials if credentials.valid else None
+
+
+def is_gmail_connected() -> bool:
+    return get_credentials() is not None
+
+
+def send_follow_up_email(recipient: str, subject: str, body: str) -> None:
+    credentials = get_credentials()
+    if not credentials:
+        raise RuntimeError("Googleアカウントの連携が必要です。")
+    message = EmailMessage()
+    message["To"] = recipient
+    message["Subject"] = subject
+    message.set_content(body)
+    raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
+    build("gmail", "v1", credentials=credentials, cache_discovery=False).users().messages().send(
+        userId="me", body={"raw": raw_message}).execute()
 
 
 # --- 1. 文字起こしファイル/テキスト読み込み処理 ---
@@ -131,12 +232,12 @@ def analyze():
 
     try:
         analysis_result = run_ai_analysis(transcript)
-        
+
         # ★ SQLite データベースに解析結果と文字起こし原文を自動保存
         saved_meeting = save_meeting(analysis_result, transcript)
         analysis_result["id"] = saved_meeting.id
 
-        return render_template("review.html", result=analysis_result)
+        return render_template("review.html", result=analysis_result, gmail_connected=is_gmail_connected())
     except Exception as e:
         return (
             render_template(
@@ -148,6 +249,61 @@ def analyze():
         )
 
 
+@app.get("/google/connect")
+def google_connect():
+    try:
+        flow = create_oauth_flow()
+        authorization_url, state = flow.authorization_url(access_type="offline", include_granted_scopes="true", prompt="consent")
+    except RuntimeError as error:
+        return render_template("email_status.html", success=False, message=str(error)), 500
+    session["oauth_state"] = state
+    session["oauth_code_verifier"] = flow.code_verifier
+    return redirect(authorization_url)
+
+
+@app.get("/oauth2callback")
+def oauth2callback():
+    if request.args.get("error"):
+        return render_template("email_status.html", success=False, message="Google連携がキャンセルされました。"), 400
+    state = session.pop("oauth_state", None)
+    code_verifier = session.pop("oauth_code_verifier", None)
+    if not state or state != request.args.get("state") or not code_verifier:
+        return render_template("email_status.html", success=False, message="Google連携の確認に失敗しました。もう一度お試しください。"), 400
+    try:
+        flow = create_oauth_flow(state, code_verifier)
+        flow.fetch_token(authorization_response=request.url, include_client_id=True)
+        save_credentials(flow.credentials)
+    except Exception as error:
+        app.logger.exception("Unable to complete Google OAuth")
+        return render_template("email_status.html", success=False, message=f"Google連携を完了できませんでした（{type(error).__name__}）。"), 502
+    return render_template("email_status.html", success=True, message="Googleアカウントを連携しました。メール送信が利用できます。", recipient=None)
+
+
+@app.post("/google/disconnect")
+def google_disconnect():
+    clear_credentials()
+    return redirect(url_for("index"))
+
+
+@app.post("/send-email")
+def send_email():
+    recipient = request.form.get("email_to", "").strip()
+    subject = request.form.get("email_subject", "").strip()
+    body = request.form.get("email_body", "").strip()
+    if not is_valid_email(recipient) or not subject or not body:
+        return render_template("email_status.html", success=False, message="宛先、件名、メール本文を正しく入力してください。"), 400
+    if not is_gmail_connected():
+        return render_template("email_status.html", success=False, message="メール送信にはGoogleアカウントの連携が必要です。", connect_url=url_for("google_connect")), 401
+    try:
+        send_follow_up_email(recipient, subject, body)
+    except HttpError:
+        app.logger.exception("Gmail API rejected send request")
+        return render_template("email_status.html", success=False, message="Gmail APIでメールを送信できませんでした。連携をやり直してください。"), 502
+    except (OSError, RuntimeError):
+        app.logger.exception("Unable to send follow-up email")
+        return render_template("email_status.html", success=False, message="メールを送信できませんでした。ネットワーク接続を確認してください。"), 502
+    return render_template("email_status.html", success=True, recipient=recipient)
+
 # =====================================================================
 # SQLite データベース用 (履歴一覧・詳細表示・削除) ルーティング
 # =====================================================================
@@ -156,11 +312,11 @@ def analyze():
 def list_meetings():
     """履歴一覧を取得（JSON返却 または HTML描画）"""
     meetings = get_all_meetings()
-    
+
     # API(JSON)リクエスト、またはクエリパラメータ format=json の場合
     if request.headers.get("X-Requested-With") == "XMLHttpRequest" or request.args.get("format") == "json":
         return jsonify([m.to_dict() for m in meetings])
-        
+
     return render_template("history.html", meetings=[m.to_dict() for m in meetings])
 
 
@@ -174,7 +330,7 @@ def get_meeting(meeting_id: int):
     if request.headers.get("X-Requested-With") == "XMLHttpRequest" or request.args.get("format") == "json":
         return jsonify(meeting.to_dict())
 
-    return render_template("review.html", result=meeting.to_dict())
+    return render_template("review.html", result=meeting.to_dict(), gmail_connected=is_gmail_connected())
 
 
 @app.delete("/api/meetings/<int:meeting_id>")
@@ -183,9 +339,9 @@ def api_delete_meeting(meeting_id: int):
     success = delete_meeting(meeting_id)
     if not success:
         return jsonify({"error": "削除対象が見つかりませんでした"}), 404
-        
+
     return jsonify({"message": "正常に削除されました", "id": meeting_id}), 200
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080, debug=True)
+    app.run(host="127.0.0.1", port=5000, debug=True)

@@ -120,34 +120,36 @@
             </div>
             <span class="editable-badge">編集できます</span>
           </div>
-          <div class="email-form">
+          <form class="email-form" action="{{ url_for('send_email') }}" method="post">
             <div class="field-group">
               <label for="email-to">宛先</label>
-              <input id="email-to" type="email" value="{{ result.email.to }}" placeholder="partner@example.com" autocomplete="email">
+              <input id="email-to" name="email_to" type="email" value="{{ result.email.to }}" placeholder="partner@example.com" autocomplete="email" required>
             </div>
             <div class="field-group">
               <label for="email-subject">件名</label>
-              <input id="email-subject" type="text" value="{{ result.email.subject }}">
+              <input id="email-subject" name="email_subject" type="text" value="{{ result.email.subject }}" required>
             </div>
             <div class="field-group">
               <div class="field-label-row">
                 <label for="email-body">メール本文</label>
                 <span id="email-character-count">0文字</span>
               </div>
-              <textarea id="email-body" class="editor" rows="15">{{ result.email.body }}</textarea>
+              <textarea id="email-body" name="email_body" class="editor" rows="15" required>{{ result.email.body }}</textarea>
             </div>
-          </div>
           <div class="email-actions">
             <button id="copy-email" class="outline-button" type="button">
               <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
               <span id="copy-button-label">メール本文をコピー</span>
             </button>
-            <button class="primary-button send-button" type="button" disabled aria-describedby="send-help">
-              メールを送信
-            </button>
+            {% if gmail_connected %}
+              <button class="primary-button send-button" type="submit">メールを送信</button>
+            {% else %}
+              <a class="primary-button send-button" href="{{ url_for('google_connect') }}">Googleで連携</a>
+            {% endif %}
           </div>
+          </form>
           <p id="copy-status" class="copy-status" role="status" aria-live="polite"></p>
-          <p id="send-help" class="send-help">Gmail連携後に送信できるようになります。現在はコピーしてご利用ください。</p>
+          <p id="send-help" class="send-help">{% if gmail_connected %}連携中のGoogleアカウントからGmailで送信します。{% else %}送信前にGoogleアカウントを連携してください。{% endif %}</p>
         </section>
       </div>
 
