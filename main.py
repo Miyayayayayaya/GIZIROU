@@ -35,7 +35,7 @@ app = Flask(__name__)
 app.config.update(
     MAX_CONTENT_LENGTH=1 * 1024 * 1024,
     SECRET_KEY=os.getenv("FLASK_SECRET_KEY", secrets.token_urlsafe(32)),
-    GOOGLE_OAUTH_REDIRECT_URI=os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "http://localhost:5000/oauth2callback"),
+    GOOGLE_OAUTH_REDIRECT_URI=os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "http://localhost:5001/oauth2callback"),
 )
 
 # データベースの初期化（sqlite:///gizirou.db を作成/接続）
@@ -344,4 +344,4 @@ def api_delete_meeting(meeting_id: int):
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    app.run(host="127.0.0.1", port=5001, debug=True)

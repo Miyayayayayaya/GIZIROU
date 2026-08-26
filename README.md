@@ -90,7 +90,7 @@ AIの解析が完了した会議について、文字起こし・議事録・分
 
 - `FLASK_SECRET_KEY`: 十分に長いランダム文字列
 - `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`: Google Auth Platformで作成したWeb applicationの認証情報
-- `GOOGLE_OAUTH_REDIRECT_URI`: Google Cloud Consoleに登録したURIと完全一致するURL（ローカル開発では `http://localhost:5000/oauth2callback`）
+- `GOOGLE_OAUTH_REDIRECT_URI`: Google Cloud Consoleに登録したURIと完全一致するURL（ローカル開発では `http://localhost:5001/oauth2callback`）
 
 初回送信前に「Googleで連携」を選択して認可します。認可トークンはローカルの `instance/oauth_tokens.sqlite3` に保存されます。ローカルでは `http://localhost:5000` を使用してください。
 
