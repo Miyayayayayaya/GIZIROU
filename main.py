@@ -15,6 +15,7 @@ from urllib.parse import urlencode, urlparse, urlunparse
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from werkzeug.middleware.proxy_fix import ProxyFix
 from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2 import id_token as google_id_token
@@ -39,6 +40,7 @@ from database import (
 load_dotenv()
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.config.update(
     MAX_CONTENT_LENGTH=1 * 1024 * 1024,
     SECRET_KEY=os.getenv("FLASK_SECRET_KEY", secrets.token_urlsafe(32)),
