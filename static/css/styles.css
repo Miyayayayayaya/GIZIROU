@@ -67,7 +67,7 @@ a { color: inherit; }
 }
 
 .brand { display: inline-flex; align-items: center; gap: 11px; font-size: 15px; font-weight: 700; text-decoration: none; letter-spacing: -0.01em; }
-.brand-mark { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; color: #fff; background: var(--brand); font-family: Georgia, serif; font-size: 17px; }
+.brand-mark { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; color: #fff; background: var(--brand); font-family: "Yu Mincho", "Hiragino Mincho ProN", serif; font-size: 17px; }
 .status-badge, .privacy-note, .editable-badge { display: inline-flex; align-items: center; border-radius: 999px; font-size: 12px; font-weight: 650; }
 .status-badge { padding: 5px 10px; background: var(--brand-soft); color: var(--brand-dark); }
 .status-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #3c9d77; margin-right: 7px; }
@@ -109,7 +109,8 @@ a { color: inherit; }
 .input-page { width: min(var(--content-width), 90vw); min-height: calc(100vh - 150px); margin: 0 auto; padding: 76px 0 90px; display: grid; grid-template-columns: minmax(0, 0.82fr) minmax(500px, 1.18fr); align-items: center; gap: clamp(52px, 7vw, 110px); }
 .eyebrow { margin: 0 0 16px; color: var(--brand); font-size: 12px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
 .intro h1, .review-header h1 { margin: 0; font-family: Georgia, "Yu Mincho", serif; font-weight: 500; letter-spacing: -0.045em; line-height: 1.18; }
-.intro h1 { font-size: clamp(42px, 5vw, 68px); }
+.intro h1 { font-size: clamp(38px, 4vw, 56px); }
+.intro-title-line { display: block; white-space: nowrap; }
 .lead { max-width: 480px; margin: 28px 0 0; color: var(--muted); font-size: 16px; line-height: 1.9; }
 .process-list { list-style: none; margin: 42px 0 0; padding: 0; display: grid; gap: 14px; color: #49534f; font-size: 14px; }
 .process-list li { display: flex; align-items: center; gap: 12px; }
@@ -172,6 +173,7 @@ textarea[aria-invalid="true"], input[aria-invalid="true"] { border-color: var(--
 .loading-card { width: min(420px, 100%); padding: 42px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: #fff; box-shadow: var(--shadow); text-align: center; }
 .loading-card h2 { margin: 20px 0 8px; font-family: Georgia, serif; font-size: 24px; font-weight: 500; }
 .loading-card p { margin: 0; color: var(--muted); font-size: 13px; }
+.loading-card p.loading-note { margin-top: 6px; font-size: 12px; }
 .loading-spinner { width: 40px; height: 40px; display: inline-block; border: 3px solid var(--brand-soft); border-top-color: var(--brand); border-radius: 50%; animation: spin 0.8s linear infinite; }
 .loading-steps { margin-top: 24px; display: flex; justify-content: center; gap: 6px; }
 .loading-steps span { width: 24px; height: 3px; border-radius: 3px; background: var(--brand-soft); animation: pulse 1.2s ease-in-out infinite; }
@@ -223,6 +225,13 @@ textarea[aria-invalid="true"], input[aria-invalid="true"] { border-color: var(--
 .meeting-details h3 { margin: 0; font-size: 16px; }
 .meeting-details p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
 .meeting-details .meeting-warning { color: var(--warning); font-weight: 650; }
+.calendar-add-form { display: grid; justify-items: end; gap: 6px; }
+.calendar-add-button { white-space: nowrap; }
+.calendar-add-button:disabled { cursor: wait; opacity: 0.65; }
+.calendar-add-status { max-width: 240px; margin: 0; color: var(--muted); font-size: 11px; text-align: right; }
+.calendar-add-status.is-success { color: var(--brand); }
+.calendar-add-status.is-error { color: var(--danger); }
+.calendar-event-link { color: var(--brand); font-weight: 700; }
 
 .email-form { display: grid; gap: 2px; }
 .email-card { border-top: 3px solid var(--brand); }
@@ -260,11 +269,14 @@ textarea[aria-invalid="true"], input[aria-invalid="true"] { border-color: var(--
 .site-footer { padding: 18px 5vw 28px; color: #818a85; font-size: 11px; text-align: center; }
 .site-footer p { margin: 0; }
 
-@media (max-width: 920px) {
+@media (max-width: 1040px) {
   .input-page { grid-template-columns: 1fr; gap: 44px; padding-top: 48px; }
   .intro { text-align: center; }
   .lead { margin-left: auto; margin-right: auto; }
   .process-list { max-width: 290px; margin-left: auto; margin-right: auto; text-align: left; }
+}
+
+@media (max-width: 920px) {
   .review-header { align-items: flex-start; flex-direction: column; }
   .review-layout { grid-template-columns: 1fr; }
   .review-aside { position: static; order: -1; }
@@ -282,7 +294,7 @@ textarea[aria-invalid="true"], input[aria-invalid="true"] { border-color: var(--
   .history-card { padding: 20px; }
   .input-page, .review-shell { width: min(100% - 32px, var(--content-width)); }
   .input-page { padding: 42px 0 58px; }
-  .intro h1 { font-size: 39px; }
+  .intro h1 { font-size: clamp(32px, 10vw, 39px); }
   .lead { font-size: 14px; }
   .input-card { padding: 22px 18px; border-radius: 15px; }
   .review-shell { padding-top: 36px; }
@@ -294,6 +306,8 @@ textarea[aria-invalid="true"], input[aria-invalid="true"] { border-color: var(--
   .meeting-summary { align-items: flex-start; flex-wrap: wrap; }
   .meeting-details { min-width: calc(100% - 78px); }
   .meeting-summary .secondary-button { width: 100%; }
+  .calendar-add-form { width: 100%; justify-items: stretch; }
+  .calendar-add-status { max-width: none; text-align: left; }
   .recipient-input-row { grid-template-columns: 1fr; }
   .recipient-add-button { width: 100%; }
   .email-actions { align-items: stretch; flex-direction: column; }

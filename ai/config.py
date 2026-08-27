@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DEFAULT_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+TRANSCRIPTION_MODEL = os.environ.get("OPENAI_TRANSCRIPTION_MODEL", "whisper-1")
 
 
 def get_api_key() -> str:

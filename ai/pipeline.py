@@ -6,7 +6,9 @@ from .extraction import extract_meeting_data
 from .minutes import generate_minutes
 
 
-def analyze_transcript(raw_notes: str, *, model: str = DEFAULT_MODEL) -> dict:
+def analyze_transcript(
+    raw_notes: str, *, model: str = DEFAULT_MODEL, sender_name: str | None = None
+) -> dict:
     """Runs extraction, minutes generation, and email generation, and
     returns a plain dict matching the shape the frontend/backend expect
     (see review.html / main.py's build_demo_analysis in the frontend PR):
@@ -32,7 +34,9 @@ def analyze_transcript(raw_notes: str, *, model: str = DEFAULT_MODEL) -> dict:
     
     with ThreadPoolExecutor(max_workers=2) as executor:
         future_minutes = executor.submit(generate_minutes, extracted, model=model)
-        future_email = executor.submit(generate_followup_email, extracted, model=model)
+        future_email = executor.submit(
+            generate_followup_email, extracted, sender_name=sender_name, model=model
+        )
         
         minutes = future_minutes.result()
         email = future_email.result()

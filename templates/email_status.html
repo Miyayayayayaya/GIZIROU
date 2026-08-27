@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Google連携・メール送信 | Meeting Follow-up AI{% endblock %}
+{% block title %}Google連携・メール送信 | 議事郎{% endblock %}
 {% block content %}
 <section class="input-page" aria-labelledby="status-title"><div class="input-card">
 {% if success %}<p class="step-label">COMPLETE</p><h1 id="status-title">{% if recipient %}メールを送信しました{% else %}Google連携が完了しました{% endif %}</h1><p class="lead">{% if recipient %}{{ recipient }} 宛にフォローアップメールを送信しました。{% else %}{{ message }}{% endif %}</p>

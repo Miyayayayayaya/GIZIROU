@@ -1,13 +1,16 @@
 {% extends "base.html" %}
 
-{% block title %}文字起こしを入力 | Meeting Follow-up AI{% endblock %}
+{% block title %}文字起こしを入力 | 議事郎{% endblock %}
 {% block page_name %}input{% endblock %}
 
 {% block content %}
   <section class="input-page" aria-labelledby="page-title">
     <div class="intro">
       <p class="eyebrow">Meeting to follow-up</p>
-      <h1 id="page-title">会議の後処理を、<br>ひとつの流れに。</h1>
+      <h1 id="page-title">
+        <span class="intro-title-line">会議の後処理を、</span>
+        <span class="intro-title-line">ひとつの流れに。</span>
+      </h1>
       <p class="lead">文字起こしを入力すると、社外向け議事録、決定事項、ToDo、フォローアップメールの下書きをまとめて作成します。</p>
 
       <ol class="process-list" aria-label="処理の流れ">
@@ -35,6 +38,20 @@
 
       <form id="transcript-form" action="{{ url_for('analyze') }}" method="post" enctype="multipart/form-data" novalidate>
         <div class="field-group">
+          <label for="sender-name">差出人名（メールの署名に使用）</label>
+          <input
+            id="sender-name"
+            name="sender_name"
+            type="text"
+            value="{{ sender_name or current_user_name or '' }}"
+            placeholder="例：議事郎"
+            autocomplete="name"
+            aria-describedby="sender-name-help"
+          >
+          <p id="sender-name-help" class="field-help">フォローアップメールの署名欄に自動で使われます。次回以降も入力内容が引き継がれます。</p>
+        </div>
+
+        <div class="field-group">
           <div class="field-label-row">
             <label for="transcript">文字起こし</label>
             <span id="character-count" aria-live="polite">0文字</span>
@@ -47,20 +64,20 @@
             aria-describedby="transcript-help transcript-error"
           >{{ transcript }}</textarea>
           <p id="transcript-help" class="field-help">会議の文字起こしをそのまま貼り付けてください。</p>
-          <p id="transcript-error" class="field-error" role="alert" hidden>文字起こしを入力するか、txtファイルを選択してください。</p>
+          <p id="transcript-error" class="field-error" role="alert" hidden>文字起こしを入力するか、txt・音声ファイルを選択してください。</p>
         </div>
 
         <div class="divider"><span>または</span></div>
 
         <div class="upload-field">
-          <input id="transcript-file" name="transcript_file" type="file" accept=".txt,text/plain" class="visually-hidden">
+          <input id="transcript-file" name="transcript_file" type="file" accept=".txt,text/plain,.mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm,audio/*" class="visually-hidden">
           <label for="transcript-file" class="upload-label">
             <span class="upload-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="24" height="24"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </span>
             <span>
-              <strong>txtファイルを選択</strong>
-              <small>UTF-8形式・最大1MB</small>
+              <strong>txt・音声ファイルを選択</strong>
+              <small>txt(UTF-8)は最大1MB、音声ファイルは最大25MB</small>
             </span>
           </label>
           <div id="selected-file" class="selected-file" aria-live="polite" hidden>
@@ -83,6 +100,7 @@
       <span class="loading-spinner" aria-hidden="true"></span>
       <h2>会議内容を整理しています</h2>
       <p>議事録、ToDo、メールの下書きを作成中です。</p>
+      <p class="loading-note">音声ファイルの場合、文字起こしに数分かかることがあります。</p>
       <div class="loading-steps" aria-hidden="true"><span></span><span></span><span></span></div>
     </div>
   </div>

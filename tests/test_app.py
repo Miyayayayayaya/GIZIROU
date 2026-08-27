@@ -5,7 +5,10 @@ from email import message_from_bytes
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from main import app, send_follow_up_email
+from ai.errors import TranscriptionError
+from sqlalchemy.exc import OperationalError
+
+from main import app, build_calendar_event, build_calendar_url, create_calendar_event, send_follow_up_email
 
 
 class FrontendFlowTest(unittest.TestCase):
@@ -36,11 +39,22 @@ class FrontendFlowTest(unittest.TestCase):
     def test_input_page_renders(self):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
+        self.assertIn("議事郎", response.get_data(as_text=True))
         self.assertIn("文字起こしを追加", response.get_data(as_text=True))
+
+    def test_input_page_heading_keeps_semantic_lines_together(self):
+        response = self.client.get("/")
+        body = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(body.count('class="intro-title-line"'), 2)
+        self.assertIn(">会議の後処理を、</span>", body)
+        self.assertIn(">ひとつの流れに。</span>", body)
 
     def test_logged_out_user_sees_login_page(self):
         response = app.test_client().get("/")
         self.assertEqual(response.status_code, 200)
+        self.assertIn("議事郎", response.get_data(as_text=True))
         self.assertIn("Googleアカウントでログイン", response.get_data(as_text=True))
 
     def test_127_host_redirects_to_oauth_host_before_login(self):
@@ -95,6 +109,21 @@ class FrontendFlowTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("議事録", response.get_data(as_text=True))
 
+    def test_oversized_txt_upload_is_rejected_by_backend(self):
+        oversized = io.BytesIO(b"0" * (1024 * 1024 + 1))
+        response = self.client.post(
+            "/analyze",
+            data={"transcript_file": (oversized, "meeting.txt")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("1MB", response.get_data(as_text=True))
+
+    def test_oversized_pasted_text_is_rejected_by_backend(self):
+        response = self.client.post("/analyze", data={"transcript": "あ" * 400_000})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("1MB", response.get_data(as_text=True))
+
     def test_non_txt_upload_is_rejected(self):
         response = self.client.post(
             "/analyze",
@@ -102,7 +131,39 @@ class FrontendFlowTest(unittest.TestCase):
             content_type="multipart/form-data",
         )
         self.assertEqual(response.status_code, 400)
-        self.assertIn(".txt形式のみ", response.get_data(as_text=True))
+        self.assertIn("音声ファイル", response.get_data(as_text=True))
+
+    def test_audio_upload_is_transcribed_and_renders_review_page(self):
+        with patch("main.transcribe_audio", return_value="会議の文字起こし結果") as mock_transcribe:
+            response = self.client.post(
+                "/analyze",
+                data={"transcript_file": (io.BytesIO(b"fake-audio-bytes"), "meeting.mp3")},
+                content_type="multipart/form-data",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("議事録", response.get_data(as_text=True))
+        mock_transcribe.assert_called_once()
+        self.assertEqual(mock_transcribe.call_args.args[1], "meeting.mp3")
+
+    def test_oversized_audio_upload_is_rejected(self):
+        oversized = io.BytesIO(b"0" * (25 * 1024 * 1024 + 1))
+        response = self.client.post(
+            "/analyze",
+            data={"transcript_file": (oversized, "meeting.wav")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("25MB", response.get_data(as_text=True))
+
+    def test_failed_audio_transcription_shows_friendly_error(self):
+        with patch("main.transcribe_audio", side_effect=TranscriptionError("boom")):
+            response = self.client.post(
+                "/analyze",
+                data={"transcript_file": (io.BytesIO(b"fake-audio-bytes"), "meeting.mp3")},
+                content_type="multipart/form-data",
+            )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("文字起こしに失敗しました", response.get_data(as_text=True))
 
     def test_ambiguous_next_meeting_shows_warning_without_calendar_link(self):
         result = {
@@ -143,6 +204,200 @@ class FrontendFlowTest(unittest.TestCase):
         body = response.get_data(as_text=True)
         self.assertNotIn("次回会議</h2>", body)
         self.assertNotIn("Google Calendarに追加", body)
+
+    def test_calendar_event_payload_uses_confirmed_meeting_time(self):
+        event = build_calendar_event(
+            {
+                "detected": True,
+                "date_confirmed": True,
+                "title": "進捗確認会",
+                "date": "2026-09-03",
+                "start_time": "14:00",
+                "end_time": "15:00",
+            }
+        )
+
+        self.assertEqual(event["summary"], "進捗確認会")
+        self.assertEqual(event["start"]["dateTime"], "2026-09-03T14:00:00+09:00")
+        self.assertEqual(event["end"]["dateTime"], "2026-09-03T15:00:00+09:00")
+        self.assertEqual(event["start"]["timeZone"], "Asia/Tokyo")
+
+    def test_calendar_event_payload_rejects_ambiguous_meeting(self):
+        with self.assertRaisesRegex(ValueError, "日時が確定していません"):
+            build_calendar_event(
+                {
+                    "detected": True,
+                    "date_confirmed": False,
+                    "title": "次回会議",
+                    "date": None,
+                    "start_time": None,
+                    "end_time": None,
+                }
+            )
+
+    def test_calendar_url_is_not_generated_for_invalid_datetime(self):
+        calendar_url = build_calendar_url(
+            {
+                "detected": True,
+                "date_confirmed": True,
+                "title": "進捗確認会",
+                "date": "2026-02-30",
+                "start_time": "14:00",
+                "end_time": "15:00",
+            }
+        )
+        self.assertEqual(calendar_url, "")
+
+    def test_confirmed_flag_without_calendar_data_shows_ambiguous_warning(self):
+        result = {
+            "external_minutes": "議事録",
+            "decisions": [],
+            "action_items": [],
+            "warnings": [],
+            "next_meeting": {
+                "detected": True,
+                "date_confirmed": True,
+                "title": "進捗確認会",
+                "date": None,
+                "start_time": "14:00",
+                "end_time": "15:00",
+                "calendar_url": "",
+            },
+            "email": {"to": "", "subject": "件名", "body": "本文"},
+            "is_demo": False,
+        }
+        with patch("main.run_ai_analysis", return_value=result):
+            response = self.client.post("/analyze", data={"transcript": "次回会議があります"})
+        body = response.get_data(as_text=True)
+        self.assertIn("日時が確定していません", body)
+        self.assertNotIn("自分のGoogle Calendarに追加", body)
+
+    @patch("main.AuthorizedHttp", return_value="authorized-http")
+    @patch("main.build")
+    @patch("main.get_credentials")
+    def test_create_calendar_event_targets_logged_in_users_primary_calendar(
+        self,
+        get_credentials_mock,
+        build_mock,
+        _authorized_http_mock,
+    ):
+        credentials = MagicMock()
+        credentials.has_scopes.return_value = True
+        get_credentials_mock.return_value = credentials
+        insert = build_mock.return_value.events.return_value.insert
+        insert.return_value.execute.return_value = {"id": "event-id"}
+        next_meeting = {
+            "detected": True,
+            "date_confirmed": True,
+            "title": "進捗確認会",
+            "date": "2026-09-03",
+            "start_time": "14:00",
+            "end_time": "15:00",
+        }
+
+        result = create_calendar_event(next_meeting)
+
+        self.assertEqual(result, {"id": "event-id"})
+        build_mock.assert_called_once_with(
+            "calendar",
+            "v3",
+            http="authorized-http",
+            cache_discovery=False,
+        )
+        self.assertEqual(insert.call_args.kwargs["calendarId"], "primary")
+        self.assertEqual(insert.call_args.kwargs["body"]["summary"], "進捗確認会")
+
+    @patch("main.update_next_meeting")
+    @patch("main.create_calendar_event")
+    @patch("main.get_meeting_by_id")
+    def test_add_calendar_event_creates_primary_calendar_event_once(
+        self,
+        get_meeting_mock,
+        create_event_mock,
+        update_next_meeting_mock,
+    ):
+        next_meeting = {
+            "detected": True,
+            "date_confirmed": True,
+            "title": "進捗確認会",
+            "date": "2026-09-03",
+            "start_time": "14:00",
+            "end_time": "15:00",
+        }
+        get_meeting_mock.return_value = SimpleNamespace(next_meeting=next_meeting)
+        create_event_mock.return_value = {
+            "id": "calendar-event-id",
+            "htmlLink": "https://calendar.google.com/event?eid=example",
+        }
+
+        response = self.client.post("/api/meetings/1/calendar-event")
+
+        self.assertEqual(response.status_code, 201)
+        get_meeting_mock.assert_called_once_with(1, "tester@example.com")
+        self.assertEqual(response.get_json()["event_url"], "https://calendar.google.com/event?eid=example")
+        create_event_mock.assert_called_once_with(next_meeting)
+        saved_next_meeting = update_next_meeting_mock.call_args.args[1]
+        self.assertEqual(saved_next_meeting["calendar_event_id"], "calendar-event-id")
+        self.assertEqual(update_next_meeting_mock.call_args.args[2], "tester@example.com")
+
+    @patch("main.create_calendar_event")
+    @patch("main.get_meeting_by_id")
+    def test_add_calendar_event_does_not_create_duplicate(self, get_meeting_mock, create_event_mock):
+        get_meeting_mock.return_value = SimpleNamespace(
+            next_meeting={
+                "detected": True,
+                "date_confirmed": True,
+                "calendar_event_id": "existing-id",
+                "calendar_event_url": "https://calendar.google.com/event?eid=existing",
+            }
+        )
+
+        response = self.client.post("/api/meetings/1/calendar-event")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["already_added"])
+        create_event_mock.assert_not_called()
+
+    @patch("main.update_next_meeting", side_effect=OperationalError("UPDATE", {}, RuntimeError("readonly")))
+    @patch("main.create_calendar_event")
+    @patch("main.get_meeting_by_id")
+    def test_calendar_success_is_reported_even_if_event_id_cannot_be_saved(
+        self,
+        get_meeting_mock,
+        create_event_mock,
+        _update_next_meeting_mock,
+    ):
+        get_meeting_mock.return_value = SimpleNamespace(
+            next_meeting={
+                "detected": True,
+                "date_confirmed": True,
+                "date": "2026-09-03",
+                "start_time": "14:00",
+                "end_time": "15:00",
+            }
+        )
+        create_event_mock.return_value = {
+            "id": "created-event-id",
+            "htmlLink": "https://calendar.google.com/event?eid=created",
+        }
+
+        response = self.client.post("/api/meetings/1/calendar-event")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(response.get_json()["persistence_warning"])
+        self.assertIn("再試行せず", response.get_json()["message"])
+
+    @patch("main.create_calendar_event", side_effect=PermissionError("Google Calendarの権限がありません。"))
+    @patch("main.get_meeting_by_id")
+    def test_add_calendar_event_requests_reconnect_when_scope_is_missing(self, get_meeting_mock, _create_event_mock):
+        get_meeting_mock.return_value = SimpleNamespace(
+            next_meeting={"detected": True, "date_confirmed": True}
+        )
+
+        response = self.client.post("/api/meetings/1/calendar-event")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["connect_url"], "/google/connect")
 
     def test_review_page_has_multiple_recipient_editor(self):
         response = self.client.post("/analyze", data={"transcript": "会議の文字起こし"})
@@ -210,6 +465,35 @@ class FrontendFlowTest(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    @patch("main.send_follow_up_email", side_effect=OSError("network details"))
+    @patch("main.is_gmail_connected", return_value=True)
+    def test_send_email_failure_does_not_show_success(self, _connected, _send_mock):
+        response = self.client.post(
+            "/send-email",
+            data={
+                "email_to": ["user@example.com"],
+                "email_subject": "件名",
+                "email_body": "本文",
+            },
+        )
+        body = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 502)
+        self.assertIn("メールを送信できませんでした", body)
+        self.assertNotIn("メールを送信しました", body)
+
+    def test_database_error_does_not_leak_sql_or_transcript(self):
+        transcript = "社外秘の会議内容"
+        with patch(
+            "main.save_meeting",
+            side_effect=OperationalError("INSERT SECRET_SQL", {}, RuntimeError("readonly database")),
+        ):
+            response = self.client.post("/analyze", data={"transcript": transcript})
+        body = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 500)
+        self.assertIn("解析結果を保存できませんでした", body)
+        self.assertNotIn("INSERT SECRET_SQL", body)
+        self.assertNotIn("readonly database", body)
+
     @patch("main.build")
     @patch("main.get_credentials", return_value=object())
     def test_gmail_message_contains_multiple_to_and_cc_headers(self, _credentials, build_mock):
@@ -250,6 +534,13 @@ class FrontendFlowTest(unittest.TestCase):
         self.assertIn("会議履歴", body)
         self.assertIn("定例会議", body)
         self.assertIn("詳細を確認", body)
+        get_all_meetings_mock.assert_called_once_with("tester@example.com")
+
+    @patch("main.get_meeting_by_id", return_value=None)
+    def test_user_cannot_read_a_meeting_not_owned_by_them(self, get_meeting_mock):
+        response = self.client.get("/meetings/99?format=json")
+        self.assertEqual(response.status_code, 404)
+        get_meeting_mock.assert_called_once_with(99, "tester@example.com")
 
     @patch("main.save_credentials")
     @patch("main.google_id_token.verify_oauth2_token")

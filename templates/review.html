@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}送信前確認 | Meeting Follow-up AI{% endblock %}
+{% block title %}送信前確認 | 議事郎{% endblock %}
 {% block page_name %}review{% endblock %}
 
 {% block content %}
@@ -95,17 +95,36 @@
               </div>
               <div class="meeting-details">
                 <h3>{{ result.next_meeting.title or 'タイトル未設定' }}</h3>
-                {% if result.next_meeting.date_confirmed %}
+                {% if result.next_meeting.date_confirmed and result.next_meeting.date and result.next_meeting.start_time and result.next_meeting.end_time %}
                   <p>{{ result.next_meeting.date }}<span aria-hidden="true"> · </span>{{ result.next_meeting.start_time }}〜{{ result.next_meeting.end_time }}</p>
                 {% else %}
                   <p class="meeting-warning">次回会議への言及がありますが、日時が確定していません。</p>
                 {% endif %}
               </div>
-              {% if result.next_meeting.date_confirmed and result.next_meeting.calendar_url %}
-                <a class="secondary-button" href="{{ result.next_meeting.calendar_url }}" target="_blank" rel="noopener noreferrer">
-                  Google Calendarに追加
-                  <span aria-hidden="true">↗</span>
-                </a>
+              {% if result.next_meeting.date_confirmed and result.next_meeting.date and result.next_meeting.start_time and result.next_meeting.end_time and (result.next_meeting.calendar_url or result.next_meeting.calendar_event_id) %}
+                {% if result.next_meeting.calendar_event_id %}
+                  <a class="secondary-button" href="{{ result.next_meeting.calendar_event_url }}" target="_blank" rel="noopener noreferrer">
+                    Calendarで確認
+                    <span aria-hidden="true">↗</span>
+                  </a>
+                {% elif result.id %}
+                  <form
+                    class="calendar-add-form"
+                    action="{{ url_for('api_add_calendar_event', meeting_id=result.id) }}"
+                    method="post"
+                    data-calendar-form
+                  >
+                    <button class="secondary-button calendar-add-button" type="submit">
+                      自分のGoogle Calendarに追加
+                    </button>
+                    <p class="calendar-add-status" role="status" aria-live="polite"></p>
+                  </form>
+                {% elif result.next_meeting.calendar_url %}
+                  <a class="secondary-button" href="{{ result.next_meeting.calendar_url }}" target="_blank" rel="noopener noreferrer">
+                    Google Calendarで開く
+                    <span aria-hidden="true">↗</span>
+                  </a>
+                {% endif %}
               {% endif %}
             </div>
           </section>

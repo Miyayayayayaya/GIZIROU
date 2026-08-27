@@ -1,6 +1,10 @@
 import json
+import os
 from datetime import datetime
+from pathlib import Path
+
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import inspect, text
 
 db = SQLAlchemy()
 
@@ -10,6 +14,7 @@ class Meeting(db.Model):
     __tablename__ = "meetings"
 
     id = db.Column(db.Integer, primary_key=True)  # ※primary_keyに修正
+    owner_email = db.Column(db.String(320), index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     title = db.Column(db.String(200), default="名称未設定の会議")
     transcript = db.Column(db.Text)
@@ -44,12 +49,23 @@ def init_db(app):
     db.init_app(app)
     with app.app_context():
         db.create_all()
+        database_path = Path(app.instance_path) / "gizirou.db"
+        try:
+            os.chmod(database_path, 0o600)
+        except OSError:
+            app.logger.warning("SQLite database file permissions could not be restricted")
+        columns = {column["name"] for column in inspect(db.engine).get_columns("meetings")}
+        if "owner_email" not in columns:
+            # create_all() は既存テーブルへ列を追加しないため、MVP用の最小移行を行う。
+            with db.engine.begin() as connection:
+                connection.execute(text("ALTER TABLE meetings ADD COLUMN owner_email VARCHAR(320)"))
 
 
-def save_meeting(data: dict, transcript: str) -> Meeting:
+def save_meeting(data: dict, transcript: str, owner_email: str) -> Meeting:
     """AI解析結果をDBに保存"""
     meeting = Meeting(
-        title=data.get("next_meeting", {}).get("title") or "会議議事録",
+        owner_email=owner_email,
+        title=data.get("meeting_title") or "会議議事録",
         transcript=transcript,
         external_minutes=data.get("external_minutes", ""),
         decisions=data.get("decisions", []),
@@ -58,26 +74,48 @@ def save_meeting(data: dict, transcript: str) -> Meeting:
         next_meeting=data.get("next_meeting", {}),
         email=data.get("email", {}),
     )
-    db.session.add(meeting)
-    db.session.commit()
+    try:
+        db.session.add(meeting)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
     return meeting
 
 
-def get_all_meetings():
+def get_all_meetings(owner_email: str):
     """履歴一覧を取得（作成日時の降順）"""
-    return Meeting.query.order_by(Meeting.created_at.desc()).all()
+    return Meeting.query.filter_by(owner_email=owner_email).order_by(Meeting.created_at.desc()).all()
 
 
-def get_meeting_by_id(meeting_id: int):
+def get_meeting_by_id(meeting_id: int, owner_email: str):
     """IDで特定の会議詳細を取得"""
-    return Meeting.query.get(meeting_id)
+    return Meeting.query.filter_by(id=meeting_id, owner_email=owner_email).first()
 
 
-def delete_meeting(meeting_id: int) -> bool:
-    """会議データを削除"""
-    meeting = Meeting.query.get(meeting_id)
-    if meeting:
-        db.session.delete(meeting)
+def update_next_meeting(meeting_id: int, next_meeting: dict, owner_email: str) -> Meeting | None:
+    """次回会議情報を更新する。Calendar APIの作成結果保存に使用する。"""
+    meeting = Meeting.query.filter_by(id=meeting_id, owner_email=owner_email).first()
+    if not meeting:
+        return None
+    meeting.next_meeting = dict(next_meeting)
+    try:
         db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return meeting
+
+
+def delete_meeting(meeting_id: int, owner_email: str) -> bool:
+    """会議データを削除"""
+    meeting = Meeting.query.filter_by(id=meeting_id, owner_email=owner_email).first()
+    if meeting:
+        try:
+            db.session.delete(meeting)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
         return True
     return False
