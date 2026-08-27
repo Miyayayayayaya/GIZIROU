@@ -4,15 +4,15 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="会議後の議事録整理とフォローアップを支援するAIエージェント">
-    <title>{% block title %}Meeting Follow-up AI{% endblock %}</title>
+    <title>{% block title %}議事郎{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css', v='20260827') }}">
     <script src="{{ url_for('static', filename='js/app.js', v='20260827') }}" defer></script>
   </head>
   <body data-page="{% block page_name %}{% endblock %}">
     <header class="site-header">
-      <a class="brand" href="{{ url_for('index') }}" aria-label="Meeting Follow-up AI ホーム">
-        <span class="brand-mark" aria-hidden="true">M</span>
-        <span>Meeting Follow-up AI</span>
+      <a class="brand" href="{{ url_for('index') }}" aria-label="議事郎 ホーム">
+        <span class="brand-mark" aria-hidden="true">議</span>
+        <span>議事郎</span>
       </a>
       {% if current_user_email %}
         <div class="header-actions">
