@@ -4,6 +4,7 @@ from .config import DEFAULT_MODEL
 from .email_draft import generate_followup_email
 from .extraction import extract_meeting_data
 from .minutes import generate_minutes
+from .translation import generate_english_followup_content
 
 
 def analyze_transcript(
@@ -15,6 +16,10 @@ def analyze_transcript(
 
         {
             "external_minutes": str,
+            "english": {
+                "external_minutes": str,
+                "email": {"subject": str, "body": str},
+            },
             "decisions": [str, ...],
             "action_items": [{"task": str, "assignee": str, "deadline": str}, ...],
             "warnings": [str, ...],
@@ -41,8 +46,14 @@ def analyze_transcript(
         minutes = future_minutes.result()
         email = future_email.result()
 
+    english = generate_english_followup_content(minutes.external_body, email, model=model)
+
     return {
         "external_minutes": minutes.external_body,
+        "english": {
+            "external_minutes": english.external_minutes,
+            "email": {"subject": english.subject, "body": english.body},
+        },
         "decisions": extracted.decisions,
         "action_items": [
             {"task": item.task, "assignee": item.assignee, "deadline": item.deadline}

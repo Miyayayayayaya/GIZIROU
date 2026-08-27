@@ -427,6 +427,44 @@ class FrontendFlowTest(unittest.TestCase):
             ["manager@example.com"],
         )
 
+    @patch("main.send_follow_up_email")
+    @patch("main.is_gmail_connected", return_value=True)
+    def test_send_email_sends_each_language_to_selected_recipients(self, _connected, send_mock):
+        response = self.client.post(
+            "/send-email",
+            data={
+                "email_to": ["jp@example.com", "en@example.com"],
+                "email_to_language": ["ja", "en"],
+                "email_cc": ["english-manager@example.com"],
+                "email_cc_language": ["en"],
+                "email_subject": "日本語件名",
+                "email_body": "日本語本文",
+                "english_email_subject": "English subject",
+                "english_email_body": "English meeting minutes",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(send_mock.call_count, 2)
+        send_mock.assert_any_call(["jp@example.com"], "日本語件名", "日本語本文", [])
+        send_mock.assert_any_call(
+            ["en@example.com"],
+            "English subject",
+            "English meeting minutes",
+            ["english-manager@example.com"],
+        )
+
+    @patch("main.is_gmail_connected", return_value=True)
+    def test_send_email_rejects_english_recipient_without_english_content(self, _connected):
+        response = self.client.post(
+            "/send-email",
+            data={
+                "email_to": ["en@example.com"],
+                "email_to_language": ["en"],
+                "email_subject": "日本語件名",
+                "email_body": "日本語本文",
+            },
+        )
+        self.assertEqual(response.status_code, 400)
     @patch("main.is_gmail_connected", return_value=True)
     def test_send_email_rejects_duplicate_recipient(self, _connected):
         response = self.client.post(
