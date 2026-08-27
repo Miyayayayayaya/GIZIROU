@@ -290,8 +290,14 @@ def run_ai_analysis(transcript: str) -> dict:
 def use_oauth_redirect_host():
     """OAuthセッション保持のため、ローカル開発時のホスト名を統一する。"""
     redirect_uri = urlparse(app.config["GOOGLE_OAUTH_REDIRECT_URI"])
-    request_host = urlparse(request.host_url).hostname
-    if redirect_uri.hostname == "localhost" and request_host != "localhost":
+    request_url = urlparse(request.host_url)
+    request_host = request_url.hostname
+    if (
+        redirect_uri.hostname == "localhost"
+        and request_host in LOCAL_OAUTH_HOSTS
+        and request_url.port == redirect_uri.port
+        and request_host != "localhost"
+    ):
         canonical_url = urlunparse(
             (
                 request.scheme,
