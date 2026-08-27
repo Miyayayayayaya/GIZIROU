@@ -120,10 +120,38 @@
             </div>
             <span class="editable-badge">編集できます</span>
           </div>
-          <form class="email-form" action="{{ url_for('send_email') }}" method="post">
-            <div class="field-group">
-              <label for="email-to">宛先</label>
-              <input id="email-to" name="email_to" type="email" value="{{ result.email.to }}" placeholder="partner@example.com" autocomplete="email" required>
+          <form id="email-form" class="email-form" action="{{ url_for('send_email') }}" method="post" novalidate>
+            <div
+              id="recipient-editor"
+              class="recipient-editor"
+              data-initial-to='{{ result.email.to|default("", true)|tojson|forceescape }}'
+              data-initial-cc='{{ result.email.cc|default([], true)|tojson|forceescape }}'
+            >
+              <fieldset class="recipient-fieldset">
+                <legend>宛先（To）<span class="required-mark">必須</span></legend>
+                <div class="recipient-input-row">
+                  <label class="visually-hidden" for="email-to-input">Toのメールアドレス</label>
+                  <input id="email-to-input" type="email" placeholder="partner@example.com" autocomplete="email" aria-describedby="email-to-help email-to-error">
+                  <button class="secondary-button recipient-add-button" type="button" data-add-recipient="to">追加</button>
+                </div>
+                <p id="email-to-help" class="field-help">メールアドレスを入力し、「追加」またはEnterキーを押してください。</p>
+                <ul id="email-to-list" class="recipient-list" aria-label="Toの宛先一覧"></ul>
+                <p id="email-to-error" class="field-error" role="alert" aria-live="polite" hidden></p>
+              </fieldset>
+
+              <fieldset class="recipient-fieldset recipient-fieldset-cc">
+                <legend>CC <span class="optional-mark">任意</span></legend>
+                <div class="recipient-input-row">
+                  <label class="visually-hidden" for="email-cc-input">CCのメールアドレス</label>
+                  <input id="email-cc-input" type="email" placeholder="manager@example.com" autocomplete="email" aria-describedby="email-cc-help email-cc-error">
+                  <button class="secondary-button recipient-add-button" type="button" data-add-recipient="cc">追加</button>
+                </div>
+                <p id="email-cc-help" class="field-help">CCが必要な場合のみ追加してください。</p>
+                <ul id="email-cc-list" class="recipient-list" aria-label="CCの宛先一覧"></ul>
+                <p id="email-cc-error" class="field-error" role="alert" aria-live="polite" hidden></p>
+              </fieldset>
+
+              <div id="recipient-hidden-fields"></div>
             </div>
             <div class="field-group">
               <label for="email-subject">件名</label>

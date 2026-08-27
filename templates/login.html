@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}ログイン | Meeting Follow-up AI{% endblock %}
+{% block page_name %}login{% endblock %}
+
+{% block content %}
+  <section class="login-page" aria-labelledby="login-title">
+    <div class="login-card">
+      <span class="brand-mark login-brand-mark" aria-hidden="true">M</span>
+      <p class="eyebrow">Meeting Follow-up AI</p>
+      <h1 id="login-title">会議後の作業を、<br>ひとつの流れに。</h1>
+      <p class="login-lead">文字起こしから議事録とフォローアップメールを作成し、確認後にGmailから送信できます。</p>
+
+      <a class="primary-button google-login-button" href="{{ url_for('google_connect') }}">
+        <span class="google-mark" aria-hidden="true">G</span>
+        Googleアカウントでログイン
+      </a>
+
+      <ul class="login-benefits" aria-label="ログイン後に利用できる機能">
+        <li><span aria-hidden="true">✓</span>文字起こしのAI分析</li>
+        <li><span aria-hidden="true">✓</span>会議履歴の確認</li>
+        <li><span aria-hidden="true">✓</span>確認後のGmail送信</li>
+      </ul>
+      <p class="login-note">AIの生成内容が自動送信されることはありません。</p>
+    </div>
+  </section>
+{% endblock %}

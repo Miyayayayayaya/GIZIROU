@@ -71,6 +71,40 @@ a { color: inherit; }
 .status-badge, .privacy-note, .editable-badge { display: inline-flex; align-items: center; border-radius: 999px; font-size: 12px; font-weight: 650; }
 .status-badge { padding: 5px 10px; background: var(--brand-soft); color: var(--brand-dark); }
 .status-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #3c9d77; margin-right: 7px; }
+.header-actions { min-width: 0; display: flex; align-items: center; gap: 14px; }
+.header-link, .header-button { border: 0; background: transparent; color: var(--muted); font-size: 12px; font-weight: 700; text-decoration: none; cursor: pointer; }
+.header-link:hover, .header-button:hover { color: var(--brand); }
+.logout-form { margin: 0; }
+.user-email { max-width: 220px; padding: 5px 10px; overflow: hidden; border-radius: 999px; background: var(--brand-soft); color: var(--brand-dark); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+
+.login-page { min-height: calc(100vh - 130px); padding: 56px 20px; display: grid; place-items: center; }
+.login-card { width: min(480px, 100%); padding: clamp(30px, 6vw, 52px); border: 1px solid rgba(195, 204, 198, 0.7); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow); text-align: center; }
+.login-brand-mark { margin: 0 auto 20px; }
+.login-card h1 { margin: 0; font-family: Georgia, "Yu Mincho", serif; font-size: clamp(34px, 7vw, 48px); font-weight: 500; letter-spacing: -0.04em; line-height: 1.25; }
+.login-lead { margin: 22px auto 0; color: var(--muted); font-size: 14px; }
+.google-login-button { margin-top: 30px; }
+.google-mark { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: #fff; color: #4285f4; font-family: Arial, sans-serif; font-weight: 800; }
+.login-benefits { list-style: none; margin: 28px 0 0; padding: 20px 0 0; display: grid; gap: 10px; border-top: 1px solid var(--line); color: #4c5752; font-size: 12px; text-align: left; }
+.login-benefits li { display: flex; align-items: center; gap: 9px; }
+.login-benefits li span { color: var(--brand); font-weight: 800; }
+.login-note { margin: 22px 0 0; color: var(--muted); font-size: 11px; }
+
+.history-shell { width: min(920px, 90vw); min-height: calc(100vh - 150px); margin: 0 auto; padding: 64px 0 90px; }
+.history-header { margin-bottom: 30px; display: flex; align-items: flex-end; justify-content: space-between; gap: 28px; }
+.history-header h1 { margin: 0; font-family: Georgia, "Yu Mincho", serif; font-size: clamp(38px, 6vw, 58px); font-weight: 500; letter-spacing: -0.04em; }
+.history-header p:last-child { margin: 12px 0 0; color: var(--muted); font-size: 13px; }
+.history-list { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.history-card { min-width: 0; padding: 24px; display: flex; align-items: center; justify-content: space-between; gap: 24px; border: 1px solid rgba(195, 204, 198, 0.7); border-radius: var(--radius-md); background: var(--surface); box-shadow: 0 10px 28px rgba(31, 52, 44, 0.05); }
+.history-card-main { min-width: 0; }
+.history-date { margin: 0 0 3px; color: var(--muted); font-size: 10px; }
+.history-card h2 { margin: 0; font-size: 18px; }
+.history-excerpt { margin: 8px 0 0; overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.history-meta { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+.history-meta span { padding: 3px 8px; border-radius: 999px; background: var(--surface-soft); color: var(--muted); font-size: 10px; }
+.history-empty { padding: 48px; text-align: center; }
+.history-empty h2 { margin: 0; }
+.history-empty p { margin: 10px 0 0; color: var(--muted); }
+.history-empty .primary-button { width: auto; margin-top: 24px; }
 
 .input-page { width: min(var(--content-width), 90vw); min-height: calc(100vh - 150px); margin: 0 auto; padding: 76px 0 90px; display: grid; grid-template-columns: minmax(0, 0.82fr) minmax(500px, 1.18fr); align-items: center; gap: clamp(52px, 7vw, 110px); }
 .eyebrow { margin: 0 0 16px; color: var(--brand); font-size: 12px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
@@ -100,7 +134,7 @@ input[type="text"], input[type="email"] { min-height: 48px; padding: 10px 14px; 
 textarea::placeholder, input::placeholder { color: #a3aba6; }
 textarea:hover, input:hover { border-color: #bdc8c1; }
 textarea:focus, input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(35, 95, 75, 0.11); }
-textarea[aria-invalid="true"] { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(162, 59, 59, 0.1); }
+textarea[aria-invalid="true"], input[aria-invalid="true"] { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(162, 59, 59, 0.1); }
 .field-help, .field-error, .submit-note, .send-help { margin: 7px 0 0; font-size: 12px; }
 .field-help, .submit-note, .send-help { color: var(--muted); }
 .field-error { color: var(--danger); font-weight: 650; }
@@ -192,6 +226,20 @@ textarea[aria-invalid="true"] { border-color: var(--danger); box-shadow: 0 0 0 3
 
 .email-form { display: grid; gap: 2px; }
 .email-card { border-top: 3px solid var(--brand); }
+.recipient-editor { margin-bottom: 4px; }
+.recipient-fieldset { min-width: 0; margin: 0 0 20px; padding: 0; border: 0; }
+.recipient-fieldset legend { width: 100%; margin-bottom: 8px; padding: 0; font-size: 13px; font-weight: 700; }
+.recipient-fieldset-cc { padding-top: 18px; border-top: 1px solid var(--line); }
+.required-mark, .optional-mark { margin-left: 7px; font-size: 10px; font-weight: 700; }
+.required-mark { color: var(--danger); }
+.optional-mark { color: var(--muted); }
+.recipient-input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 9px; }
+.recipient-add-button { min-width: 70px; min-height: 48px; }
+.recipient-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 7px; }
+.recipient-chip { max-width: 100%; padding: 6px 7px 6px 11px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid #c8d8d0; border-radius: 999px; background: var(--brand-soft); color: var(--brand-dark); font-size: 12px; }
+.recipient-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recipient-remove-button { width: 23px; height: 23px; padding: 0; display: grid; place-items: center; flex: 0 0 auto; border: 0; border-radius: 50%; background: transparent; color: var(--brand-dark); cursor: pointer; font-size: 17px; line-height: 1; }
+.recipient-remove-button:hover { background: rgba(35, 95, 75, 0.12); }
 .email-actions { justify-content: flex-end; gap: 10px; margin-top: 8px; }
 .email-actions .primary-button { width: auto; min-width: 150px; min-height: 44px; margin: 0; }
 .copy-status { min-height: 22px; margin: 7px 0 0; color: var(--brand); font-size: 12px; text-align: right; }
@@ -227,6 +275,11 @@ textarea[aria-invalid="true"] { border-color: var(--danger); box-shadow: 0 0 0 3
 @media (max-width: 640px) {
   .site-header { min-height: 64px; padding: 0 20px; }
   .status-badge { display: none; }
+  .header-actions { gap: 9px; }
+  .user-email { display: none; }
+  .history-header, .history-card { align-items: stretch; flex-direction: column; }
+  .history-header .secondary-button, .history-card .secondary-button { width: 100%; }
+  .history-card { padding: 20px; }
   .input-page, .review-shell { width: min(100% - 32px, var(--content-width)); }
   .input-page { padding: 42px 0 58px; }
   .intro h1 { font-size: 39px; }
@@ -241,6 +294,8 @@ textarea[aria-invalid="true"] { border-color: var(--danger); box-shadow: 0 0 0 3
   .meeting-summary { align-items: flex-start; flex-wrap: wrap; }
   .meeting-details { min-width: calc(100% - 78px); }
   .meeting-summary .secondary-button { width: 100%; }
+  .recipient-input-row { grid-template-columns: 1fr; }
+  .recipient-add-button { width: 100%; }
   .email-actions { align-items: stretch; flex-direction: column; }
   .email-actions .primary-button, .outline-button { width: 100%; }
   .copy-status, .send-help { text-align: left; }
