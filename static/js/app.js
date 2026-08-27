@@ -124,14 +124,17 @@ if (reviewPage) {
   const recipientEditor = document.querySelector("#recipient-editor");
 
   const recipientState = { to: [], cc: [] };
+  const recipientLanguages = new Map();
   const recipientElements = {
     to: {
       input: document.querySelector("#email-to-input"),
+      language: document.querySelector("#email-to-language"),
       list: document.querySelector("#email-to-list"),
       error: document.querySelector("#email-to-error"),
     },
     cc: {
       input: document.querySelector("#email-cc-input"),
+      language: document.querySelector("#email-cc-language"),
       list: document.querySelector("#email-cc-list"),
       error: document.querySelector("#email-cc-error"),
     },
@@ -216,15 +219,29 @@ if (reviewPage) {
     }
   };
 
+  const updateEnglishEmailVisibility = () => {
+    const englishEmailDetails = document.querySelector("#english-email-details");
+    if (!englishEmailDetails) return;
+    const hasEnglishRecipient = [...recipientState.to, ...recipientState.cc]
+      .some((address) => recipientLanguages.get(address.toLowerCase()) === "en");
+    englishEmailDetails.hidden = !hasEnglishRecipient;
+    englishEmailDetails.open = hasEnglishRecipient;
+  };
   const syncHiddenFields = () => {
     hiddenFields.replaceChildren();
     Object.entries(recipientState).forEach(([kind, addresses]) => {
       addresses.forEach((address) => {
-        const input = document.createElement("input");
-        input.type = "hidden";
-        input.name = kind === "to" ? "email_to" : "email_cc";
-        input.value = address;
-        hiddenFields.append(input);
+        const addressInput = document.createElement("input");
+        addressInput.type = "hidden";
+        addressInput.name = kind === "to" ? "email_to" : "email_cc";
+        addressInput.value = address;
+        hiddenFields.append(addressInput);
+
+        const languageInput = document.createElement("input");
+        languageInput.type = "hidden";
+        languageInput.name = kind === "to" ? "email_to_language" : "email_cc_language";
+        languageInput.value = recipientLanguages.get(address.toLowerCase()) || "ja";
+        hiddenFields.append(languageInput);
       });
     });
   };
@@ -237,7 +254,7 @@ if (reviewPage) {
       item.className = "recipient-chip";
 
       const addressText = document.createElement("span");
-      addressText.textContent = address;
+      addressText.textContent = `${address} (${recipientLanguages.get(address.toLowerCase()) === "en" ? "English" : "日本語"})`;
 
       const removeButton = document.createElement("button");
       removeButton.type = "button";
@@ -251,6 +268,7 @@ if (reviewPage) {
       list.append(item);
     });
     syncHiddenFields();
+    updateEnglishEmailVisibility();
   };
 
   const addRecipients = (kind, rawValue, announceError = true) => {
@@ -276,6 +294,8 @@ if (reviewPage) {
       return false;
     }
 
+    const language = recipientElements[kind].language.value;
+    addresses.forEach((address) => recipientLanguages.set(address.toLowerCase(), language));
     recipientState[kind].push(...addresses);
     recipientElements[kind].input.value = "";
     setRecipientError(kind);
@@ -287,6 +307,7 @@ if (reviewPage) {
     recipientState.to = parseInitialRecipients(recipientEditor.dataset.initialTo);
     recipientState.cc = parseInitialRecipients(recipientEditor.dataset.initialCc)
       .filter((address) => !recipientState.to.some((toAddress) => toAddress.toLowerCase() === address.toLowerCase()));
+    [...recipientState.to, ...recipientState.cc].forEach((address) => recipientLanguages.set(address.toLowerCase(), "ja"));
     renderRecipientList("to");
     renderRecipientList("cc");
 
@@ -312,6 +333,7 @@ if (reviewPage) {
       if (!button) return;
       const kind = button.dataset.removeRecipient;
       recipientState[kind] = recipientState[kind].filter((address) => address !== button.dataset.address);
+      recipientLanguages.delete(button.dataset.address.toLowerCase());
       setRecipientError(kind);
       renderRecipientList(kind);
       recipientElements[kind].input.focus();

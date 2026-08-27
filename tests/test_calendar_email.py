@@ -22,6 +22,10 @@ def analysis_result(*, date_confirmed=True, calendar_placeholder=False):
             "end_time": "15:00" if date_confirmed else None,
         },
         "email": {"to": "", "subject": "件名", "body": body},
+        "english": {
+            "external_minutes": "English meeting minutes",
+            "email": {"subject": "Subject", "body": "English body"},
+        },
     }
 
 

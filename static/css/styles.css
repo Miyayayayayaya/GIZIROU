@@ -242,7 +242,11 @@ textarea[aria-invalid="true"], input[aria-invalid="true"] { border-color: var(--
 .required-mark, .optional-mark { margin-left: 7px; font-size: 10px; font-weight: 700; }
 .required-mark { color: var(--danger); }
 .optional-mark { color: var(--muted); }
-.recipient-input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 9px; }
+.recipient-input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 9px; }
+.recipient-language-select { min-height: 48px; min-width: 100px; }
+.english-email-details { margin: 14px 0 4px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); }
+.english-email-details summary { color: var(--brand-dark); cursor: pointer; font-weight: 700; }
+.english-email-details[open] summary { margin-bottom: 12px; }
 .recipient-add-button { min-width: 70px; min-height: 48px; }
 .recipient-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 7px; }
 .recipient-chip { max-width: 100%; padding: 6px 7px 6px 11px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid #c8d8d0; border-radius: 999px; background: var(--brand-soft); color: var(--brand-dark); font-size: 12px; }

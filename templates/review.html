@@ -139,6 +139,7 @@
             </div>
             <span class="editable-badge">編集できます</span>
           </div>
+          {% set english_email = result.get('english', {}).get('email', {}) %}
           <form id="email-form" class="email-form" action="{{ url_for('send_email') }}" method="post" novalidate>
             <div
               id="recipient-editor"
@@ -151,9 +152,11 @@
                 <div class="recipient-input-row">
                   <label class="visually-hidden" for="email-to-input">Toのメールアドレス</label>
                   <input id="email-to-input" type="email" placeholder="partner@example.com" autocomplete="email" aria-describedby="email-to-help email-to-error">
+                  <label class="visually-hidden" for="email-to-language">送信言語</label>
+                  <select id="email-to-language" class="recipient-language-select" aria-label="Toに送るメールの言語"><option value="ja">日本語</option><option value="en">English</option></select>
                   <button class="secondary-button recipient-add-button" type="button" data-add-recipient="to">追加</button>
                 </div>
-                <p id="email-to-help" class="field-help">メールアドレスを入力し、「追加」またはEnterキーを押してください。</p>
+                <p id="email-to-help" class="field-help">メールアドレスと送信言語を選び、「追加」またはEnterキーを押してください。</p>
                 <ul id="email-to-list" class="recipient-list" aria-label="Toの宛先一覧"></ul>
                 <p id="email-to-error" class="field-error" role="alert" aria-live="polite" hidden></p>
               </fieldset>
@@ -163,9 +166,11 @@
                 <div class="recipient-input-row">
                   <label class="visually-hidden" for="email-cc-input">CCのメールアドレス</label>
                   <input id="email-cc-input" type="email" placeholder="manager@example.com" autocomplete="email" aria-describedby="email-cc-help email-cc-error">
+                  <label class="visually-hidden" for="email-cc-language">送信言語</label>
+                  <select id="email-cc-language" class="recipient-language-select" aria-label="CCに送るメールの言語"><option value="ja">日本語</option><option value="en">English</option></select>
                   <button class="secondary-button recipient-add-button" type="button" data-add-recipient="cc">追加</button>
                 </div>
-                <p id="email-cc-help" class="field-help">CCが必要な場合のみ追加してください。</p>
+                <p id="email-cc-help" class="field-help">CCも、対応するToと同じ送信言語を選んで追加してください。</p>
                 <ul id="email-cc-list" class="recipient-list" aria-label="CCの宛先一覧"></ul>
                 <p id="email-cc-error" class="field-error" role="alert" aria-live="polite" hidden></p>
               </fieldset>
@@ -178,11 +183,23 @@
             </div>
             <div class="field-group">
               <div class="field-label-row">
-                <label for="email-body">メール本文</label>
+                <label for="email-body">日本語メール本文</label>
                 <span id="email-character-count">0文字</span>
               </div>
               <textarea id="email-body" name="email_body" class="editor" rows="15" required>{{ result.email.body }}</textarea>
             </div>
+            <details id="english-email-details" class="english-email-details" hidden>
+              <summary>英語版メール（英語を選んだ宛先にのみ送信）</summary>
+              <p class="field-help">英語版には、AIが翻訳した議事録全文を含めています。送信前に内容を確認・編集できます。</p>
+              <div class="field-group">
+                <label for="english-email-subject">英語メール件名</label>
+                <input id="english-email-subject" name="english_email_subject" type="text" value="{{ english_email.get('subject', '') }}">
+              </div>
+              <div class="field-group">
+                <label for="english-email-body">英語メール本文（英語版議事録を含む）</label>
+                <textarea id="english-email-body" name="english_email_body" class="editor" rows="15">{{ english_email.get('body', '') }}</textarea>
+              </div>
+            </details>
           <div class="email-actions">
             <button id="copy-email" class="outline-button" type="button">
               <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>

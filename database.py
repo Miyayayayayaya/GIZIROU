@@ -19,6 +19,7 @@ class Meeting(db.Model):
     title = db.Column(db.String(200), default="名称未設定の会議")
     transcript = db.Column(db.Text)
     external_minutes = db.Column(db.Text)
+    english = db.Column(db.JSON)
     decisions = db.Column(db.JSON)
     action_items = db.Column(db.JSON)
     warnings = db.Column(db.JSON)
@@ -33,6 +34,7 @@ class Meeting(db.Model):
             "title": self.title,
             "transcript": self.transcript,
             "external_minutes": self.external_minutes,
+            "english": self.english or {},
             "decisions": self.decisions,
             "action_items": self.action_items,
             "warnings": self.warnings,
@@ -55,6 +57,9 @@ def init_db(app):
         except OSError:
             app.logger.warning("SQLite database file permissions could not be restricted")
         columns = {column["name"] for column in inspect(db.engine).get_columns("meetings")}
+        if "english" not in columns:
+            with db.engine.begin() as connection:
+                connection.execute(text("ALTER TABLE meetings ADD COLUMN english JSON"))
         if "owner_email" not in columns:
             # create_all() は既存テーブルへ列を追加しないため、MVP用の最小移行を行う。
             with db.engine.begin() as connection:
@@ -68,6 +73,7 @@ def save_meeting(data: dict, transcript: str, owner_email: str) -> Meeting:
         title=data.get("meeting_title") or "会議議事録",
         transcript=transcript,
         external_minutes=data.get("external_minutes", ""),
+        english=data.get("english", {}),
         decisions=data.get("decisions", []),
         action_items=data.get("action_items", []),
         warnings=data.get("warnings", []),
