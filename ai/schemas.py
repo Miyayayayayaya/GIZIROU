@@ -1,6 +1,8 @@
+from datetime import date as date_value
+from datetime import time as time_value
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class MeetingInfo(BaseModel):
@@ -24,6 +26,47 @@ class NextMeetingInfo(BaseModel):
     date: Optional[str] = None
     start_time: Optional[str] = None
     end_time: Optional[str] = None
+
+    @model_validator(mode="after")
+    def keep_confirmation_consistent(self):
+        """不完全・不正な日時を「確定」として後段へ渡さない。"""
+        if not self.detected:
+            self.date_confirmed = False
+            self.date = None
+            self.start_time = None
+            self.end_time = None
+            return self
+
+        if not self.date_confirmed:
+            self.date = None
+            self.start_time = None
+            self.end_time = None
+            return self
+
+        if not all((self.date, self.start_time, self.end_time)):
+            self.date_confirmed = False
+            self.date = None
+            self.start_time = None
+            self.end_time = None
+            return self
+
+        try:
+            date_value.fromisoformat(self.date)
+            start = time_value.fromisoformat(self.start_time)
+            end = time_value.fromisoformat(self.end_time)
+        except (TypeError, ValueError):
+            self.date_confirmed = False
+            self.date = None
+            self.start_time = None
+            self.end_time = None
+            return self
+
+        if start == end:
+            self.date_confirmed = False
+            self.date = None
+            self.start_time = None
+            self.end_time = None
+        return self
 
 
 class ExtractedMeetingData(BaseModel):

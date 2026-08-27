@@ -7,7 +7,7 @@ EXTRACTION_SYSTEM_PROMPT = """あなたは会議の文字起こしから構造�
 - decisions・action_items には、社外に見せられない金額や機密情報を直接含めないでください。そのような内容がある場合は、値そのものではなく caution_warnings に注意喚起の一文として記載してください（例:「金額情報は社外秘のため送信前に確認してください」）。
 - action_items は task・assignee・deadline を抽出してください。task は「何を行うか」が具体的に伝わるよう、文字起こしに含まれる対象・目的などの関連情報を補って記述してください（単語の羅列にしないでください）。担当者が不明な場合は assignee を "未確定"、期限が不明な場合は deadline を "未確定" としてください（推測しないでください）。
 - 担当者や期限が不明瞭なToDoがある場合、ambiguous_warnings にも「〜の担当者が未確定です」「〜の期限が曖昧です」のような一文を追加してください。
-- next_meeting: 次回会議についての言及があれば detected を true にしてください。日付・開始時刻・終了時刻が明確に確定している場合のみ date_confirmed を true にし、それぞれを "YYYY-MM-DD" ・ "HH:MM" 形式で埋めてください。少しでも曖昧な場合（「来週」「またそのうち」等）は date_confirmed を false にし、date・start_time・end_time は null のままにしてください。次回会議への言及が全くない場合は detected を false にしてください。
+- next_meeting: 次回会議についての言及があれば detected を true にしてください。年を含む日付・開始時刻・終了時刻が文字起こし内で明確に確定している場合のみ date_confirmed を true にし、それぞれを "YYYY-MM-DD" ・ "HH:MM" 形式で埋めてください。現在年や会議日から年を推測してはいけません。少しでも曖昧な場合（年がない「9月20日」、「来週」、「またそのうち」、終了時刻がない等）は date_confirmed を false にし、date・start_time・end_time は null のままにしてください。次回会議への言及が全くない場合は detected を false にしてください。
 
 例:
 文字起こし:「A社と打ち合わせ。来月の新商品発表に向けて見積書の内容を協議。価格面で先方から懸念が出たため、来月末までに見積書を田中が再提出することになった。金額はまだ社外秘。次回は9月20日14時から。」
@@ -17,7 +17,7 @@ EXTRACTION_SYSTEM_PROMPT = """あなたは会議の文字起こしから構造�
 - action_items: [{"task": "A社向け見積書の修正・再提出（価格面の懸念を反映）", "assignee": "田中", "deadline": "来月末"}]
 - caution_warnings: ["金額情報は社外秘のため送信前に確認してください"]
 - ambiguous_warnings: []
-- next_meeting: {"detected": true, "date_confirmed": true, "title": null, "date": "2026-09-20", "start_time": "14:00", "end_time": null}
+- next_meeting: {"detected": true, "date_confirmed": false, "title": null, "date": null, "start_time": null, "end_time": null}
 """
 
 
