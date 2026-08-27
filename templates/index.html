@@ -35,6 +35,20 @@
 
       <form id="transcript-form" action="{{ url_for('analyze') }}" method="post" enctype="multipart/form-data" novalidate>
         <div class="field-group">
+          <label for="sender-name">差出人名（メールの署名に使用）</label>
+          <input
+            id="sender-name"
+            name="sender_name"
+            type="text"
+            value="{{ sender_name or current_user_name or '' }}"
+            placeholder="例：議事郎"
+            autocomplete="name"
+            aria-describedby="sender-name-help"
+          >
+          <p id="sender-name-help" class="field-help">フォローアップメールの署名欄に自動で使われます。次回以降も入力内容が引き継がれます。</p>
+        </div>
+
+        <div class="field-group">
           <div class="field-label-row">
             <label for="transcript">文字起こし</label>
             <span id="character-count" aria-live="polite">0文字</span>
