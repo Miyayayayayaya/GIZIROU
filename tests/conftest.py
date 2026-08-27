@@ -53,7 +53,7 @@ def sample_extracted_data() -> ExtractedMeetingData:
             title=None,
             date="2026-09-20",
             start_time="14:00",
-            end_time=None,
+            end_time="15:00",
         ),
         summary="新製品Aの導入スケジュールについて合意した。",
     )

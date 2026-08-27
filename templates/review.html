@@ -95,13 +95,13 @@
               </div>
               <div class="meeting-details">
                 <h3>{{ result.next_meeting.title or 'タイトル未設定' }}</h3>
-                {% if result.next_meeting.date_confirmed %}
+                {% if result.next_meeting.date_confirmed and result.next_meeting.date and result.next_meeting.start_time and result.next_meeting.end_time %}
                   <p>{{ result.next_meeting.date }}<span aria-hidden="true"> · </span>{{ result.next_meeting.start_time }}〜{{ result.next_meeting.end_time }}</p>
                 {% else %}
                   <p class="meeting-warning">次回会議への言及がありますが、日時が確定していません。</p>
                 {% endif %}
               </div>
-              {% if result.next_meeting.date_confirmed %}
+              {% if result.next_meeting.date_confirmed and result.next_meeting.date and result.next_meeting.start_time and result.next_meeting.end_time and (result.next_meeting.calendar_url or result.next_meeting.calendar_event_id) %}
                 {% if result.next_meeting.calendar_event_id %}
                   <a class="secondary-button" href="{{ result.next_meeting.calendar_event_url }}" target="_blank" rel="noopener noreferrer">
                     Calendarで確認
