@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}会議履歴 | Meeting Follow-up AI{% endblock %}
+{% block page_name %}history{% endblock %}
+
+{% block content %}
+  <div class="history-shell">
+    <header class="history-header">
+      <div>
+        <p class="eyebrow">Meeting history</p>
+        <h1>会議履歴</h1>
+        <p>保存した議事録とメール下書きを確認できます。</p>
+      </div>
+      <a class="secondary-button" href="{{ url_for('index') }}">新しい文字起こしを入力</a>
+    </header>
+
+    {% if meetings %}
+      <div class="history-list">
+        {% for meeting in meetings %}
+          <article class="history-card">
+            <div class="history-card-main">
+              <p class="history-date">{{ meeting.created_at }}</p>
+              <h2>{{ meeting.title or '会議議事録' }}</h2>
+              <p class="history-excerpt">{{ meeting.external_minutes[:120] if meeting.external_minutes else '議事録本文はありません。' }}</p>
+              <div class="history-meta">
+                <span>決定事項 {{ meeting.decisions|length if meeting.decisions else 0 }}件</span>
+                <span>警告 {{ meeting.warnings|length if meeting.warnings else 0 }}件</span>
+              </div>
+            </div>
+            <a class="secondary-button" href="{{ url_for('get_meeting', meeting_id=meeting.id) }}">詳細を確認</a>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="content-card history-empty">
+        <h2>保存された会議はありません</h2>
+        <p>文字起こしを分析すると、ここから後で確認できます。</p>
+        <a class="primary-button" href="{{ url_for('index') }}">文字起こしを入力する</a>
+      </div>
+    {% endif %}
+  </div>
+{% endblock %}

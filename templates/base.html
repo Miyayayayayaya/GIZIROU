@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="会議後の議事録整理とフォローアップを支援するAIエージェント">
     <title>{% block title %}Meeting Follow-up AI{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css', v='20260826') }}">
-    <script src="{{ url_for('static', filename='js/app.js', v='20260826') }}" defer></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css', v='20260827') }}">
+    <script src="{{ url_for('static', filename='js/app.js', v='20260827') }}" defer></script>
   </head>
   <body data-page="{% block page_name %}{% endblock %}">
     <header class="site-header">
@@ -14,7 +14,17 @@
         <span class="brand-mark" aria-hidden="true">M</span>
         <span>Meeting Follow-up AI</span>
       </a>
-      <span class="status-badge">Human reviewed</span>
+      {% if current_user_email %}
+        <div class="header-actions">
+          <a class="header-link" href="{{ url_for('list_meetings') }}">会議履歴</a>
+          <span class="user-email" title="{{ current_user_email }}">{{ current_user_email }}</span>
+          <form class="logout-form" action="{{ url_for('google_disconnect') }}" method="post">
+            <button class="header-button" type="submit">ログアウト</button>
+          </form>
+        </div>
+      {% else %}
+        <span class="status-badge">Human reviewed</span>
+      {% endif %}
     </header>
 
     <main>{% block content %}{% endblock %}</main>
