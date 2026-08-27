@@ -329,11 +329,19 @@ def oauth2callback():
         return render_template("email_status.html", success=False, message="Google連携がキャンセルされました。"), 400
     state = session.pop("oauth_state", None)
     code_verifier = session.pop("oauth_code_verifier", None)
+    app.logger.info(
+        "Google OAuth callback received (host=%s, state=%s, code_verifier=%s)",
+        request.host,
+        bool(state),
+        bool(code_verifier),
+    )
     if not state or state != request.args.get("state") or not code_verifier:
         return render_template("email_status.html", success=False, message="Google連携の確認に失敗しました。もう一度お試しください。"), 400
     try:
         flow = create_oauth_flow(state, code_verifier)
-        flow.fetch_token(authorization_response=request.url, include_client_id=True)
+        app.logger.info("Exchanging Google OAuth authorization code")
+        flow.fetch_token(authorization_response=request.url, include_client_id=True, timeout=15)
+        app.logger.info("Google OAuth token exchange completed")
         id_info = google_id_token.verify_oauth2_token(
             flow.credentials.id_token,
             Request(),
