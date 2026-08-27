@@ -36,11 +36,13 @@ class FrontendFlowTest(unittest.TestCase):
     def test_input_page_renders(self):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
+        self.assertIn("議事郎", response.get_data(as_text=True))
         self.assertIn("文字起こしを追加", response.get_data(as_text=True))
 
     def test_logged_out_user_sees_login_page(self):
         response = app.test_client().get("/")
         self.assertEqual(response.status_code, 200)
+        self.assertIn("議事郎", response.get_data(as_text=True))
         self.assertIn("Googleアカウントでログイン", response.get_data(as_text=True))
 
     def test_127_host_redirects_to_oauth_host_before_login(self):

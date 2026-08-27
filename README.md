@@ -1,4 +1,4 @@
-# Meeting Follow-up AI Agent
+# 議事郎（Meeting Follow-up AI Agent）
 
 社外の人を含む会議の終了後に発生する、議事録の清書・情報整理・フォローアップメール作成・次回会議の予定共有をAIで支援するWebアプリです。
 

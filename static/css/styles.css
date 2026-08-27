@@ -67,7 +67,7 @@ a { color: inherit; }
 }
 
 .brand { display: inline-flex; align-items: center; gap: 11px; font-size: 15px; font-weight: 700; text-decoration: none; letter-spacing: -0.01em; }
-.brand-mark { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; color: #fff; background: var(--brand); font-family: Georgia, serif; font-size: 17px; }
+.brand-mark { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; color: #fff; background: var(--brand); font-family: "Yu Mincho", "Hiragino Mincho ProN", serif; font-size: 17px; }
 .status-badge, .privacy-note, .editable-badge { display: inline-flex; align-items: center; border-radius: 999px; font-size: 12px; font-weight: 650; }
 .status-badge { padding: 5px 10px; background: var(--brand-soft); color: var(--brand-dark); }
 .status-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #3c9d77; margin-right: 7px; }
