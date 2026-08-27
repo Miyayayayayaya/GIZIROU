@@ -376,6 +376,15 @@ def oauth2callback():
         app.logger.info("Exchanging Google OAuth authorization code")
         flow.fetch_token(authorization_response=request.url, include_client_id=True, timeout=15)
         app.logger.info("Google OAuth token exchange completed")
+    except Exception as error:
+        app.logger.exception("Google OAuth token exchange failed: %s", error)
+        return render_template(
+            "email_status.html",
+            success=False,
+            message="Google認証コードを交換できませんでした。Client SecretとリダイレクトURIを確認してください。",
+        ), 502
+
+    try:
         id_info = google_id_token.verify_oauth2_token(
             flow.credentials.id_token,
             Request(),
@@ -383,12 +392,28 @@ def oauth2callback():
         )
         if not id_info.get("email") or not id_info.get("email_verified"):
             raise ValueError("Googleアカウントのメールアドレスを確認できませんでした。")
+    except ValueError as error:
+        app.logger.exception("Google OAuth ID token validation failed: %s", error)
+        return render_template(
+            "email_status.html",
+            success=False,
+            message="Google IDトークンを検証できませんでした。OAuth Client IDが認証に使用したClient IDと一致するか確認してください。",
+        ), 502
+    except Exception as error:
+        app.logger.exception("Google OAuth identity verification failed: %s", error)
+        return render_template(
+            "email_status.html",
+            success=False,
+            message="Googleアカウント情報を確認できませんでした。OAuth設定とGoogle APIへの接続を確認してください。",
+        ), 502
+
+    try:
         save_credentials(flow.credentials)
         session["user_email"] = id_info["email"]
         session["user_name"] = id_info.get("name") or id_info["email"]
     except Exception as error:
-        app.logger.exception("Unable to complete Google OAuth")
-        return render_template("email_status.html", success=False, message=f"Google連携を完了できませんでした（{type(error).__name__}）。"), 502
+        app.logger.exception("Unable to store Google OAuth credentials: %s", error)
+        return render_template("email_status.html", success=False, message="Google連携情報を保存できませんでした。もう一度お試しください。"), 502
     return redirect(url_for("index"))
 
 
