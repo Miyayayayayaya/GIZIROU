@@ -109,7 +109,8 @@ a { color: inherit; }
 .input-page { width: min(var(--content-width), 90vw); min-height: calc(100vh - 150px); margin: 0 auto; padding: 76px 0 90px; display: grid; grid-template-columns: minmax(0, 0.82fr) minmax(500px, 1.18fr); align-items: center; gap: clamp(52px, 7vw, 110px); }
 .eyebrow { margin: 0 0 16px; color: var(--brand); font-size: 12px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
 .intro h1, .review-header h1 { margin: 0; font-family: Georgia, "Yu Mincho", serif; font-weight: 500; letter-spacing: -0.045em; line-height: 1.18; }
-.intro h1 { font-size: clamp(42px, 5vw, 68px); }
+.intro h1 { font-size: clamp(38px, 4vw, 56px); }
+.intro-title-line { display: block; white-space: nowrap; }
 .lead { max-width: 480px; margin: 28px 0 0; color: var(--muted); font-size: 16px; line-height: 1.9; }
 .process-list { list-style: none; margin: 42px 0 0; padding: 0; display: grid; gap: 14px; color: #49534f; font-size: 14px; }
 .process-list li { display: flex; align-items: center; gap: 12px; }
@@ -260,11 +261,14 @@ textarea[aria-invalid="true"], input[aria-invalid="true"] { border-color: var(--
 .site-footer { padding: 18px 5vw 28px; color: #818a85; font-size: 11px; text-align: center; }
 .site-footer p { margin: 0; }
 
-@media (max-width: 920px) {
+@media (max-width: 1040px) {
   .input-page { grid-template-columns: 1fr; gap: 44px; padding-top: 48px; }
   .intro { text-align: center; }
   .lead { margin-left: auto; margin-right: auto; }
   .process-list { max-width: 290px; margin-left: auto; margin-right: auto; text-align: left; }
+}
+
+@media (max-width: 920px) {
   .review-header { align-items: flex-start; flex-direction: column; }
   .review-layout { grid-template-columns: 1fr; }
   .review-aside { position: static; order: -1; }
@@ -282,7 +286,7 @@ textarea[aria-invalid="true"], input[aria-invalid="true"] { border-color: var(--
   .history-card { padding: 20px; }
   .input-page, .review-shell { width: min(100% - 32px, var(--content-width)); }
   .input-page { padding: 42px 0 58px; }
-  .intro h1 { font-size: 39px; }
+  .intro h1 { font-size: clamp(32px, 10vw, 39px); }
   .lead { font-size: 14px; }
   .input-card { padding: 22px 18px; border-radius: 15px; }
   .review-shell { padding-top: 36px; }

@@ -39,6 +39,15 @@ class FrontendFlowTest(unittest.TestCase):
         self.assertIn("議事郎", response.get_data(as_text=True))
         self.assertIn("文字起こしを追加", response.get_data(as_text=True))
 
+    def test_input_page_heading_keeps_semantic_lines_together(self):
+        response = self.client.get("/")
+        body = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(body.count('class="intro-title-line"'), 2)
+        self.assertIn(">会議の後処理を、</span>", body)
+        self.assertIn(">ひとつの流れに。</span>", body)
+
     def test_logged_out_user_sees_login_page(self):
         response = app.test_client().get("/")
         self.assertEqual(response.status_code, 200)
