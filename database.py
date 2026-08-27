@@ -73,6 +73,16 @@ def get_meeting_by_id(meeting_id: int):
     return Meeting.query.get(meeting_id)
 
 
+def update_next_meeting(meeting_id: int, next_meeting: dict) -> Meeting | None:
+    """次回会議情報を更新する。Calendar APIの作成結果保存に使用する。"""
+    meeting = Meeting.query.get(meeting_id)
+    if not meeting:
+        return None
+    meeting.next_meeting = dict(next_meeting)
+    db.session.commit()
+    return meeting
+
+
 def delete_meeting(meeting_id: int) -> bool:
     """会議データを削除"""
     meeting = Meeting.query.get(meeting_id)

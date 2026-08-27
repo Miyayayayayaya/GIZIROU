@@ -7,12 +7,14 @@ import secrets
 import socket
 import sqlite3
 from contextlib import contextmanager
+from datetime import datetime, timedelta
 from email.message import EmailMessage
 from email.utils import parseaddr
 from functools import wraps
 from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlencode, urlparse, urlunparse
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
@@ -35,6 +37,7 @@ from database import (
     get_meeting_by_id,
     init_db,
     save_meeting,
+    update_next_meeting,
 )
 
 load_dotenv()
@@ -55,11 +58,13 @@ ALLOWED_EXTENSIONS = {".txt"}
 ALLOWED_AUDIO_EXTENSIONS = {".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".wav", ".webm"}
 MAX_AUDIO_FILE_SIZE = 25 * 1024 * 1024  # OpenAIの音声文字起こしAPIの上限
 GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
+CALENDAR_EVENTS_SCOPE = "https://www.googleapis.com/auth/calendar.events"
 OAUTH_SCOPES = [
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
     GMAIL_SEND_SCOPE,
+    CALENDAR_EVENTS_SCOPE,
 ]
 _redirect_host = urlparse(app.config["GOOGLE_OAUTH_REDIRECT_URI"]).hostname
 LOCAL_OAUTH_HOSTS = {"localhost", "127.0.0.1", "::1"}
@@ -141,7 +146,9 @@ def get_credentials() -> Credentials | None:
         row = connection.execute("SELECT token_json FROM oauth_tokens WHERE session_id = ?", (token_id,)).fetchone()
     if not row:
         return None
-    credentials = Credentials.from_authorized_user_info(json.loads(row[0]), OAUTH_SCOPES)
+    # 保存済みトークンが実際に持つ権限を維持する。新しい権限を引数で
+    # 上書きすると、未認可でも認可済みと誤判定するため scopes は渡さない。
+    credentials = Credentials.from_authorized_user_info(json.loads(row[0]))
     if credentials.expired and credentials.refresh_token:
         try:
             credentials.refresh(Request())
@@ -156,6 +163,10 @@ def get_credentials() -> Credentials | None:
 
 def is_gmail_connected() -> bool:
     return get_credentials() is not None
+
+
+def has_calendar_permission(credentials: Credentials | None) -> bool:
+    return bool(credentials and credentials.has_scopes([CALENDAR_EVENTS_SCOPE]))
 
 
 def is_logged_in() -> bool:
@@ -203,6 +214,55 @@ def send_follow_up_email(recipients: list[str], subject: str, body: str, cc_reci
         build("gmail", "v1", http=authorized_http, cache_discovery=False).users().messages().send(
             userId="me", body={"raw": raw_message}).execute()
     app.logger.info("Gmail API send completed")
+
+
+def build_calendar_event(next_meeting: dict) -> dict:
+    """AIが抽出した確定済み日時をGoogle Calendar API形式へ変換する。"""
+    if not (next_meeting.get("detected") and next_meeting.get("date_confirmed")):
+        raise ValueError("次回会議の日時が確定していません。")
+
+    date = next_meeting.get("date")
+    start_time = next_meeting.get("start_time")
+    if not date or not start_time:
+        raise ValueError("次回会議の日付と開始時刻が必要です。")
+
+    try:
+        timezone = ZoneInfo("Asia/Tokyo")
+        start = datetime.fromisoformat(f"{date}T{start_time}").replace(tzinfo=timezone)
+        end_time = next_meeting.get("end_time")
+        end = datetime.fromisoformat(f"{date}T{end_time}").replace(tzinfo=timezone) if end_time else start + timedelta(hours=1)
+    except (TypeError, ValueError) as error:
+        raise ValueError("次回会議の日時形式が正しくありません。") from error
+
+    if end <= start:
+        end += timedelta(days=1)
+
+    event = {
+        "summary": next_meeting.get("title") or "次回会議",
+        "start": {"dateTime": start.isoformat(), "timeZone": "Asia/Tokyo"},
+        "end": {"dateTime": end.isoformat(), "timeZone": "Asia/Tokyo"},
+        "description": next_meeting.get("description") or "議事郎で抽出した次回会議です。",
+    }
+    if next_meeting.get("location"):
+        event["location"] = next_meeting["location"]
+    return event
+
+
+def create_calendar_event(next_meeting: dict) -> dict:
+    """ログイン中ユーザーのprimaryカレンダーへ予定を作成する。"""
+    credentials = get_credentials()
+    if not credentials:
+        raise RuntimeError("Googleアカウントの連携が必要です。")
+    if not has_calendar_permission(credentials):
+        raise PermissionError("Google Calendarの権限がありません。Google連携をやり直してください。")
+
+    event_body = build_calendar_event(next_meeting)
+    with local_ipv4_dns():
+        authorized_http = AuthorizedHttp(credentials, http=httplib2.Http(timeout=15))
+        return build("calendar", "v3", http=authorized_http, cache_discovery=False).events().insert(
+            calendarId="primary",
+            body=event_body,
+        ).execute()
 
 
 # --- 1. 文字起こしファイル/音声ファイル/テキスト読み込み処理 ---
@@ -460,6 +520,55 @@ def send_email():
     if cc_recipients:
         recipient_summary += f" / CC: {', '.join(cc_recipients)}"
     return render_template("email_status.html", success=True, recipient=recipient_summary)
+
+
+@app.post("/api/meetings/<int:meeting_id>/calendar-event")
+@login_required
+def api_add_calendar_event(meeting_id: int):
+    """確定済みの次回会議をログイン中ユーザーのカレンダーへ追加する。"""
+    meeting = get_meeting_by_id(meeting_id)
+    if not meeting:
+        return jsonify({"error": "指定された議事録が見つかりません。"}), 404
+
+    next_meeting = dict(meeting.next_meeting or {})
+    if next_meeting.get("calendar_event_id"):
+        return jsonify(
+            {
+                "message": "この予定はすでにGoogle Calendarへ追加されています。",
+                "event_url": next_meeting.get("calendar_event_url", ""),
+                "already_added": True,
+            }
+        )
+
+    try:
+        event = create_calendar_event(dict(next_meeting))
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    except PermissionError as error:
+        return jsonify({"error": str(error), "connect_url": url_for("google_connect")}), 403
+    except RuntimeError as error:
+        return jsonify({"error": str(error), "connect_url": url_for("google_connect")}), 401
+    except HttpError:
+        app.logger.exception("Google Calendar API rejected event creation")
+        return jsonify({"error": "Google Calendarに予定を追加できませんでした。Google連携をやり直してください。"}), 502
+    except OSError:
+        app.logger.exception("Unable to create Google Calendar event")
+        return jsonify({"error": "Google Calendarに接続できませんでした。ネットワーク接続を確認してください。"}), 502
+
+    next_meeting.update(
+        {
+            "calendar_event_id": event.get("id"),
+            "calendar_event_url": event.get("htmlLink", ""),
+        }
+    )
+    update_next_meeting(meeting_id, next_meeting)
+    return jsonify(
+        {
+            "message": "自分のGoogle Calendarに追加しました。",
+            "event_url": next_meeting["calendar_event_url"],
+            "already_added": False,
+        }
+    ), 201
 
 # =====================================================================
 # SQLite データベース用 (履歴一覧・詳細表示・削除) ルーティング

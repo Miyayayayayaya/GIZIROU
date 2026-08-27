@@ -62,7 +62,7 @@ MVPでは独自のID・パスワードを発行せず、Googleアカウントを
 - 開始時刻
 - 終了時刻
 
-日時が確定している場合は、Google Calendarに予定を追加するためのリンクを生成し、フォローアップメールに追加します。
+日時が確定している場合は、送信前確認画面のボタンから、ログイン中ユーザー自身のGoogle Calendarへ予定を追加できます。同じ会議を繰り返し登録しないよう、作成済みのイベントIDをSQLiteへ保存します。また、フォローアップメールには受信者向けのGoogle Calendar追加リンクを含めます。
 
 日時が曖昧な場合は、AIが勝手に日時を決定せず、送信前に警告を表示します。
 
@@ -100,7 +100,9 @@ AIの解析が完了した会議について、文字起こし・議事録・分
 - `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`: Google Auth Platformで作成したWeb applicationの認証情報
 - `GOOGLE_OAUTH_REDIRECT_URI`: Google Cloud Consoleに登録したURIと完全一致するURL（ローカル開発では `http://localhost:5001/oauth2callback`）
 
-アプリを開いたら「Googleでログイン」を選択して認証・認可します。認可トークンはローカルの `instance/oauth_tokens.sqlite3` に保存されます。ローカルでは必ず `http://localhost:5001` を使用し、`127.0.0.1` と混在させないでください。
+Google Cloud側ではGmail APIとGoogle Calendar APIを有効にしてください。アプリを開いたら「Googleでログイン」を選択し、メール送信とカレンダー予定作成の権限を認可します。Calendar権限の追加前にログイン済みだった場合は、一度Google連携をやり直してください。
+
+認可トークンはローカルの `instance/oauth_tokens.sqlite3` に保存されます。ローカルでは必ず `http://localhost:5001` を使用し、`127.0.0.1` と混在させないでください。
 
 ## 処理フロー
 
@@ -165,7 +167,7 @@ MVPではGoogle OAuthによるログインと未ログイン時のアクセス�
 - SQLite
 - Google OAuth
 - Gmail API
-- Google Calendar追加リンク
+- Google Calendar API・追加リンク
 
 開発経験が多くない4人でのチーム開発のため、必要以上に複雑なフレームワークや構成は使用せず、MVPの完成を優先します。
 
@@ -236,7 +238,7 @@ Flaskを中心に各機能を接続します。
 Googleでログイン → 文字起こしを入力 → AIが議事録・メールを生成 → SQLiteへ履歴を保存 → 送信前に確認・修正 → ログイン中のGoogleアカウントからメールを送信
 ```
 
-次回会議が決まっている場合は、Google Calendarへの追加リンクもメールに含めます。
+次回会議の日時が確定している場合は、自分のGoogle Calendarへワンクリックで追加でき、メールには参加者向けの追加リンクも含めます。
 
 MVPでは、Googleログイン、ログイン状態の保持、ログアウト、未ログイン時のアクセス制限、ログイン中ユーザーのメールアドレス表示を必須とします。保存した会議履歴は、同じPC・サーバー環境でアプリを再度開いたときに確認できることをMVPの対象とします。
 
@@ -246,7 +248,6 @@ MVPでは、Googleログイン、ログイン状態の保持、ログアウト�
 
 MVP完成後、必要に応じて以下の機能を検討します。
 
-- Google Calendarとの本格的なAPI連携
 - ユーザーごとの会議履歴管理
 - 保存期間の設定と履歴の一括削除
 - Google Meet / Zoom等からの文字起こし自動取得

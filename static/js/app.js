@@ -114,6 +114,7 @@ if (inputPage) {
 }
 
 if (reviewPage) {
+  const calendarForm = document.querySelector("[data-calendar-form]");
   const emailForm = document.querySelector("#email-form");
   const emailBody = document.querySelector("#email-body");
   const characterCount = document.querySelector("#email-character-count");
@@ -136,6 +137,57 @@ if (reviewPage) {
     },
   };
   const hiddenFields = document.querySelector("#recipient-hidden-fields");
+
+  if (calendarForm) {
+    const calendarButton = calendarForm.querySelector(".calendar-add-button");
+    const calendarStatus = calendarForm.querySelector(".calendar-add-status");
+
+    calendarForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      calendarButton.disabled = true;
+      calendarButton.textContent = "追加中…";
+      calendarStatus.className = "calendar-add-status";
+      calendarStatus.textContent = "Google Calendarへ追加しています。";
+
+      try {
+        const response = await fetch(calendarForm.action, {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+          },
+        });
+        const result = await response.json();
+        if (!response.ok) throw Object.assign(new Error(result.error || "予定を追加できませんでした。"), result);
+
+        calendarStatus.classList.add("is-success");
+        calendarStatus.textContent = result.message;
+        if (result.event_url) {
+          const eventLink = document.createElement("a");
+          eventLink.className = "calendar-event-link";
+          eventLink.href = result.event_url;
+          eventLink.target = "_blank";
+          eventLink.rel = "noopener noreferrer";
+          eventLink.textContent = "Calendarで確認 ↗";
+          calendarForm.replaceChild(eventLink, calendarButton);
+        } else {
+          calendarButton.textContent = "追加済み";
+        }
+      } catch (error) {
+        calendarStatus.classList.add("is-error");
+        calendarStatus.textContent = error.message;
+        if (error.connect_url) {
+          const connectLink = document.createElement("a");
+          connectLink.className = "calendar-event-link";
+          connectLink.href = error.connect_url;
+          connectLink.textContent = "Google連携をやり直す";
+          calendarStatus.append(" ", connectLink);
+        }
+        calendarButton.disabled = false;
+        calendarButton.textContent = "自分のGoogle Calendarに追加";
+      }
+    });
+  }
 
   const normalizeInitialRecipients = (value) => {
     if (Array.isArray(value)) return value;
