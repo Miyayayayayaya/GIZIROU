@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from ai.errors import TranscriptionError
-from main import app, send_follow_up_email
+from main import app, build_calendar_event, create_calendar_event, send_follow_up_email
 
 
 class FrontendFlowTest(unittest.TestCase):
@@ -187,6 +187,132 @@ class FrontendFlowTest(unittest.TestCase):
         body = response.get_data(as_text=True)
         self.assertNotIn("次回会議</h2>", body)
         self.assertNotIn("Google Calendarに追加", body)
+
+    def test_calendar_event_payload_uses_confirmed_meeting_time(self):
+        event = build_calendar_event(
+            {
+                "detected": True,
+                "date_confirmed": True,
+                "title": "進捗確認会",
+                "date": "2026-09-03",
+                "start_time": "14:00",
+                "end_time": "15:00",
+            }
+        )
+
+        self.assertEqual(event["summary"], "進捗確認会")
+        self.assertEqual(event["start"]["dateTime"], "2026-09-03T14:00:00+09:00")
+        self.assertEqual(event["end"]["dateTime"], "2026-09-03T15:00:00+09:00")
+        self.assertEqual(event["start"]["timeZone"], "Asia/Tokyo")
+
+    def test_calendar_event_payload_rejects_ambiguous_meeting(self):
+        with self.assertRaisesRegex(ValueError, "日時が確定していません"):
+            build_calendar_event(
+                {
+                    "detected": True,
+                    "date_confirmed": False,
+                    "title": "次回会議",
+                    "date": None,
+                    "start_time": None,
+                    "end_time": None,
+                }
+            )
+
+    @patch("main.AuthorizedHttp", return_value="authorized-http")
+    @patch("main.build")
+    @patch("main.get_credentials")
+    def test_create_calendar_event_targets_logged_in_users_primary_calendar(
+        self,
+        get_credentials_mock,
+        build_mock,
+        _authorized_http_mock,
+    ):
+        credentials = MagicMock()
+        credentials.has_scopes.return_value = True
+        get_credentials_mock.return_value = credentials
+        insert = build_mock.return_value.events.return_value.insert
+        insert.return_value.execute.return_value = {"id": "event-id"}
+        next_meeting = {
+            "detected": True,
+            "date_confirmed": True,
+            "title": "進捗確認会",
+            "date": "2026-09-03",
+            "start_time": "14:00",
+            "end_time": "15:00",
+        }
+
+        result = create_calendar_event(next_meeting)
+
+        self.assertEqual(result, {"id": "event-id"})
+        build_mock.assert_called_once_with(
+            "calendar",
+            "v3",
+            http="authorized-http",
+            cache_discovery=False,
+        )
+        self.assertEqual(insert.call_args.kwargs["calendarId"], "primary")
+        self.assertEqual(insert.call_args.kwargs["body"]["summary"], "進捗確認会")
+
+    @patch("main.update_next_meeting")
+    @patch("main.create_calendar_event")
+    @patch("main.get_meeting_by_id")
+    def test_add_calendar_event_creates_primary_calendar_event_once(
+        self,
+        get_meeting_mock,
+        create_event_mock,
+        update_next_meeting_mock,
+    ):
+        next_meeting = {
+            "detected": True,
+            "date_confirmed": True,
+            "title": "進捗確認会",
+            "date": "2026-09-03",
+            "start_time": "14:00",
+            "end_time": "15:00",
+        }
+        get_meeting_mock.return_value = SimpleNamespace(next_meeting=next_meeting)
+        create_event_mock.return_value = {
+            "id": "calendar-event-id",
+            "htmlLink": "https://calendar.google.com/event?eid=example",
+        }
+
+        response = self.client.post("/api/meetings/1/calendar-event")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.get_json()["event_url"], "https://calendar.google.com/event?eid=example")
+        create_event_mock.assert_called_once_with(next_meeting)
+        saved_next_meeting = update_next_meeting_mock.call_args.args[1]
+        self.assertEqual(saved_next_meeting["calendar_event_id"], "calendar-event-id")
+
+    @patch("main.create_calendar_event")
+    @patch("main.get_meeting_by_id")
+    def test_add_calendar_event_does_not_create_duplicate(self, get_meeting_mock, create_event_mock):
+        get_meeting_mock.return_value = SimpleNamespace(
+            next_meeting={
+                "detected": True,
+                "date_confirmed": True,
+                "calendar_event_id": "existing-id",
+                "calendar_event_url": "https://calendar.google.com/event?eid=existing",
+            }
+        )
+
+        response = self.client.post("/api/meetings/1/calendar-event")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["already_added"])
+        create_event_mock.assert_not_called()
+
+    @patch("main.create_calendar_event", side_effect=PermissionError("Google Calendarの権限がありません。"))
+    @patch("main.get_meeting_by_id")
+    def test_add_calendar_event_requests_reconnect_when_scope_is_missing(self, get_meeting_mock, _create_event_mock):
+        get_meeting_mock.return_value = SimpleNamespace(
+            next_meeting={"detected": True, "date_confirmed": True}
+        )
+
+        response = self.client.post("/api/meetings/1/calendar-event")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["connect_url"], "/google/connect")
 
     def test_review_page_has_multiple_recipient_editor(self):
         response = self.client.post("/analyze", data={"transcript": "会議の文字起こし"})

@@ -101,11 +101,30 @@
                   <p class="meeting-warning">次回会議への言及がありますが、日時が確定していません。</p>
                 {% endif %}
               </div>
-              {% if result.next_meeting.date_confirmed and result.next_meeting.calendar_url %}
-                <a class="secondary-button" href="{{ result.next_meeting.calendar_url }}" target="_blank" rel="noopener noreferrer">
-                  Google Calendarに追加
-                  <span aria-hidden="true">↗</span>
-                </a>
+              {% if result.next_meeting.date_confirmed %}
+                {% if result.next_meeting.calendar_event_id %}
+                  <a class="secondary-button" href="{{ result.next_meeting.calendar_event_url }}" target="_blank" rel="noopener noreferrer">
+                    Calendarで確認
+                    <span aria-hidden="true">↗</span>
+                  </a>
+                {% elif result.id %}
+                  <form
+                    class="calendar-add-form"
+                    action="{{ url_for('api_add_calendar_event', meeting_id=result.id) }}"
+                    method="post"
+                    data-calendar-form
+                  >
+                    <button class="secondary-button calendar-add-button" type="submit">
+                      自分のGoogle Calendarに追加
+                    </button>
+                    <p class="calendar-add-status" role="status" aria-live="polite"></p>
+                  </form>
+                {% elif result.next_meeting.calendar_url %}
+                  <a class="secondary-button" href="{{ result.next_meeting.calendar_url }}" target="_blank" rel="noopener noreferrer">
+                    Google Calendarで開く
+                    <span aria-hidden="true">↗</span>
+                  </a>
+                {% endif %}
               {% endif %}
             </div>
           </section>
