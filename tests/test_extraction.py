@@ -22,7 +22,13 @@ def test_extract_meeting_data_maps_parsed_response_to_schema(mock_get_client):
         action_items=[ActionItem(task="資料作成", assignee="佐藤", deadline="9月10日")],
         caution_warnings=[],
         ambiguous_warnings=[],
-        next_meeting=NextMeetingInfo(detected=True, date_confirmed=True, date="2026-09-20"),
+        next_meeting=NextMeetingInfo(
+            detected=True,
+            date_confirmed=True,
+            date="2026-09-20",
+            start_time="14:00",
+            end_time="15:00",
+        ),
         summary="A案を採用することで合意した。",
     )
     mock_client = MagicMock()

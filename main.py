@@ -28,11 +28,15 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import httplib2
 from urllib3.util import connection as urllib3_connection
-from ai import TranscriptionError, analyze_transcript, transcribe_audio
+from sqlalchemy.exc import SQLAlchemyError
+from werkzeug.exceptions import RequestEntityTooLarge
+
+from ai import AIModuleError, TranscriptionError, analyze_transcript, transcribe_audio
 
 # --- database.py から関数・オブジェクトをインポート ---
 from database import (
     delete_meeting,
+    db,
     get_all_meetings,
     get_meeting_by_id,
     init_db,
@@ -43,12 +47,15 @@ from database import (
 load_dotenv()
 
 app = Flask(__name__)
+oauth_redirect_uri = os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "http://localhost:5001/oauth2callback")
 app.config.update(
     MAX_CONTENT_LENGTH=26 * 1024 * 1024,
+    MAX_FORM_MEMORY_SIZE=5 * 1024 * 1024,
     SECRET_KEY=os.getenv("FLASK_SECRET_KEY", secrets.token_urlsafe(32)),
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
-    GOOGLE_OAUTH_REDIRECT_URI=os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "http://localhost:5001/oauth2callback"),
+    SESSION_COOKIE_SECURE=urlparse(oauth_redirect_uri).scheme == "https",
+    GOOGLE_OAUTH_REDIRECT_URI=oauth_redirect_uri,
 )
 
 # データベースの初期化（sqlite:///gizirou.db を作成/接続）
@@ -57,6 +64,7 @@ init_db(app)
 ALLOWED_EXTENSIONS = {".txt"}
 ALLOWED_AUDIO_EXTENSIONS = {".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".wav", ".webm"}
 MAX_AUDIO_FILE_SIZE = 25 * 1024 * 1024  # OpenAIの音声文字起こしAPIの上限
+MAX_TEXT_FILE_SIZE = 1024 * 1024
 GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
 CALENDAR_EVENTS_SCOPE = "https://www.googleapis.com/auth/calendar.events"
 OAUTH_SCOPES = [
@@ -119,7 +127,12 @@ def create_oauth_flow(state: str | None = None, code_verifier: str | None = None
 
 def token_database() -> sqlite3.Connection:
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(Path(app.instance_path) / "oauth_tokens.sqlite3")
+    database_path = Path(app.instance_path) / "oauth_tokens.sqlite3"
+    connection = sqlite3.connect(database_path)
+    try:
+        os.chmod(database_path, 0o600)
+    except OSError:
+        app.logger.warning("OAuth token database file permissions could not be restricted")
     connection.execute("CREATE TABLE IF NOT EXISTS oauth_tokens (session_id TEXT PRIMARY KEY, token_json TEXT NOT NULL)")
     return connection
 
@@ -162,7 +175,8 @@ def get_credentials() -> Credentials | None:
 
 
 def is_gmail_connected() -> bool:
-    return get_credentials() is not None
+    credentials = get_credentials()
+    return bool(credentials and credentials.has_scopes([GMAIL_SEND_SCOPE]))
 
 
 def has_calendar_permission(credentials: Credentials | None) -> bool:
@@ -223,14 +237,14 @@ def build_calendar_event(next_meeting: dict) -> dict:
 
     date = next_meeting.get("date")
     start_time = next_meeting.get("start_time")
-    if not date or not start_time:
-        raise ValueError("次回会議の日付と開始時刻が必要です。")
+    end_time = next_meeting.get("end_time")
+    if not date or not start_time or not end_time:
+        raise ValueError("次回会議の日付・開始時刻・終了時刻が必要です。")
 
     try:
         timezone = ZoneInfo("Asia/Tokyo")
         start = datetime.fromisoformat(f"{date}T{start_time}").replace(tzinfo=timezone)
-        end_time = next_meeting.get("end_time")
-        end = datetime.fromisoformat(f"{date}T{end_time}").replace(tzinfo=timezone) if end_time else start + timedelta(hours=1)
+        end = datetime.fromisoformat(f"{date}T{end_time}").replace(tzinfo=timezone)
     except (TypeError, ValueError) as error:
         raise ValueError("次回会議の日時形式が正しくありません。") from error
 
@@ -272,6 +286,8 @@ def read_transcript() -> tuple[str, str | None]:
     uploaded_file = request.files.get("transcript_file")
 
     if pasted_text:
+        if len(pasted_text.encode("utf-8")) > MAX_TEXT_FILE_SIZE:
+            return "", "文字起こし本文は1MB以下にしてください。"
         return pasted_text, None
 
     if not uploaded_file or not uploaded_file.filename:
@@ -292,8 +308,11 @@ def read_transcript() -> tuple[str, str | None]:
     if extension not in ALLOWED_EXTENSIONS:
         return "", "アップロードできるファイルは.txt形式、または音声ファイル（mp3・m4a・wav等）です。"
 
+    text_bytes = uploaded_file.read(MAX_TEXT_FILE_SIZE + 1)
+    if len(text_bytes) > MAX_TEXT_FILE_SIZE:
+        return "", "txtファイルのサイズは1MB以下にしてください。"
     try:
-        return uploaded_file.read().decode("utf-8-sig").strip(), None
+        return text_bytes.decode("utf-8-sig").strip(), None
     except UnicodeDecodeError:
         return "", "ファイルを読み込めませんでした。UTF-8形式のtxtファイルを選択してください。"
 
@@ -304,30 +323,18 @@ def build_calendar_url(next_meeting: dict) -> str:
     if not (next_meeting.get("detected") and next_meeting.get("date_confirmed")):
         return ""
 
-    date_str = (next_meeting.get("date") or "").replace("-", "")
-    start_time_str = (next_meeting.get("start_time") or "").replace(":", "")
-    end_time_str = (next_meeting.get("end_time") or "").replace(":", "")
-
-    # 日付と開始時刻が無い場合は生成不可
-    if not date_str or not start_time_str:
+    try:
+        event = build_calendar_event(next_meeting)
+        start = datetime.fromisoformat(event["start"]["dateTime"])
+        end = datetime.fromisoformat(event["end"]["dateTime"])
+    except (KeyError, TypeError, ValueError):
         return ""
-
-    # 終了時刻が無い場合は開始時刻から1時間後に設定
-    if not end_time_str:
-        try:
-            start_hour = int(start_time_str[:2])
-            end_time_str = f"{(start_hour + 1) % 24:02d}{start_time_str[2:]}"
-        except ValueError:
-            end_time_str = start_time_str
-
-    start_iso = f"{date_str}T{start_time_str}00"
-    end_iso = f"{date_str}T{end_time_str}00"
 
     query = urlencode(
         {
             "action": "TEMPLATE",
-            "text": next_meeting.get("title") or "次回会議",
-            "dates": f"{start_iso}/{end_iso}",
+            "text": event["summary"],
+            "dates": f"{start.strftime('%Y%m%dT%H%M%S')}/{end.strftime('%Y%m%dT%H%M%S')}",
             "ctz": "Asia/Tokyo",
         }
     )
@@ -379,6 +386,21 @@ def use_oauth_redirect_host():
         return redirect(canonical_url)
 
 
+@app.errorhandler(RequestEntityTooLarge)
+def request_too_large(_error):
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "アップロードできるファイルサイズを超えています。"}), 413
+    return (
+        render_template(
+            "index.html",
+            error="アップロードできるファイルサイズを超えています。",
+            transcript="",
+            sender_name=session.get("sender_name", ""),
+        ),
+        413,
+    )
+
+
 @app.get("/")
 def index():
     if not is_logged_in():
@@ -416,20 +438,31 @@ def analyze():
         analysis_result = run_ai_analysis(transcript, sender_name)
 
         # ★ SQLite データベースに解析結果と文字起こし原文を自動保存
-        saved_meeting = save_meeting(analysis_result, transcript)
+        saved_meeting = save_meeting(analysis_result, transcript, session["user_email"])
         analysis_result["id"] = saved_meeting.id
 
         return render_template("review.html", result=analysis_result, gmail_connected=is_gmail_connected())
-    except Exception as e:
-        return (
-            render_template(
-                "index.html",
-                error=f"解析エラーが発生しました: {str(e)}",
-                transcript=transcript,
-                sender_name=sender_name,
-            ),
-            500,
-        )
+    except AIModuleError:
+        app.logger.exception("AI analysis failed")
+        message = "AIによる解析に失敗しました。API設定とネットワーク接続を確認して、もう一度お試しください。"
+    except SQLAlchemyError:
+        db.session.rollback()
+        app.logger.exception("Unable to save meeting analysis")
+        message = "解析結果を保存できませんでした。アプリを再起動して、もう一度お試しください。"
+    except Exception:
+        db.session.rollback()
+        app.logger.exception("Unexpected analysis failure")
+        message = "解析中に予期しないエラーが発生しました。もう一度お試しください。"
+
+    return (
+        render_template(
+            "index.html",
+            error=message,
+            transcript=transcript,
+            sender_name=sender_name,
+        ),
+        500,
+    )
 
 
 @app.get("/google/connect")
@@ -526,7 +559,8 @@ def send_email():
 @login_required
 def api_add_calendar_event(meeting_id: int):
     """確定済みの次回会議をログイン中ユーザーのカレンダーへ追加する。"""
-    meeting = get_meeting_by_id(meeting_id)
+    owner_email = session["user_email"]
+    meeting = get_meeting_by_id(meeting_id, owner_email)
     if not meeting:
         return jsonify({"error": "指定された議事録が見つかりません。"}), 404
 
@@ -561,7 +595,23 @@ def api_add_calendar_event(meeting_id: int):
             "calendar_event_url": event.get("htmlLink", ""),
         }
     )
-    update_next_meeting(meeting_id, next_meeting)
+    try:
+        persisted = update_next_meeting(meeting_id, next_meeting, owner_email)
+    except SQLAlchemyError:
+        db.session.rollback()
+        app.logger.exception("Calendar event was created but its ID could not be saved")
+        persisted = None
+
+    if not persisted:
+        return jsonify(
+            {
+                "message": "Google Calendarへの追加は完了しましたが、履歴へ記録できませんでした。再試行せずCalendarで予定を確認してください。",
+                "event_url": next_meeting["calendar_event_url"],
+                "already_added": False,
+                "persistence_warning": True,
+            }
+        ), 201
+
     return jsonify(
         {
             "message": "自分のGoogle Calendarに追加しました。",
@@ -578,7 +628,7 @@ def api_add_calendar_event(meeting_id: int):
 @login_required
 def list_meetings():
     """履歴一覧を取得（JSON返却 または HTML描画）"""
-    meetings = get_all_meetings()
+    meetings = get_all_meetings(session["user_email"])
 
     # API(JSON)リクエスト、またはクエリパラメータ format=json の場合
     if request.headers.get("X-Requested-With") == "XMLHttpRequest" or request.args.get("format") == "json":
@@ -591,7 +641,7 @@ def list_meetings():
 @login_required
 def get_meeting(meeting_id: int):
     """特定の会議詳細を取得"""
-    meeting = get_meeting_by_id(meeting_id)
+    meeting = get_meeting_by_id(meeting_id, session["user_email"])
     if not meeting:
         return jsonify({"error": "指定された議事録が見つかりません"}), 404
 
@@ -605,7 +655,7 @@ def get_meeting(meeting_id: int):
 @login_required
 def api_delete_meeting(meeting_id: int):
     """特定会議データの削除API"""
-    success = delete_meeting(meeting_id)
+    success = delete_meeting(meeting_id, session["user_email"])
     if not success:
         return jsonify({"error": "削除対象が見つかりませんでした"}), 404
 
@@ -613,6 +663,8 @@ def api_delete_meeting(meeting_id: int):
 
 
 if __name__ == "__main__":
-    # macOSの localhost は IPv6 (::1) を優先することがあるため、
-    # Google OAuth のコールバックを IPv4 / IPv6 の両方で受け付ける。
-    app.run(host="::", port=5001, debug=True)
+    app.run(
+        host=os.getenv("FLASK_HOST", "127.0.0.1"),
+        port=int(os.getenv("PORT", "5001")),
+        debug=os.getenv("FLASK_DEBUG", "").casefold() in {"1", "true", "yes"},
+    )
