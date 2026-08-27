@@ -41,6 +41,12 @@ class FrontendFlowTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Googleアカウントでログイン", response.get_data(as_text=True))
 
+    def test_127_host_redirects_to_oauth_host_before_login(self):
+        response = app.test_client().get("/", base_url="http://127.0.0.1:5001", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], "http://localhost:5001/")
+
     def test_logged_out_user_cannot_analyze(self):
         response = app.test_client().post("/analyze", data={"transcript": "会議内容"})
         self.assertEqual(response.status_code, 302)

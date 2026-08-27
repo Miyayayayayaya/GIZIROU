@@ -9,7 +9,7 @@ from email.message import EmailMessage
 from email.utils import parseaddr
 from functools import wraps
 from pathlib import Path
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlencode, urlparse, urlunparse
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
@@ -252,6 +252,25 @@ def run_ai_analysis(transcript: str) -> dict:
 
 
 # --- 4. Flask ルーティング ---
+@app.before_request
+def use_oauth_redirect_host():
+    """OAuthセッション保持のため、ローカル開発時のホスト名を統一する。"""
+    redirect_uri = urlparse(app.config["GOOGLE_OAUTH_REDIRECT_URI"])
+    request_host = request.host.split(":", 1)[0]
+    if redirect_uri.hostname == "localhost" and request_host == "127.0.0.1":
+        canonical_url = urlunparse(
+            (
+                request.scheme,
+                redirect_uri.netloc,
+                request.path,
+                "",
+                request.query_string.decode(),
+                "",
+            )
+        )
+        return redirect(canonical_url)
+
+
 @app.get("/")
 def index():
     if not is_logged_in():
