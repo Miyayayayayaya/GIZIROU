@@ -6,6 +6,7 @@ import os
 import secrets
 import socket
 import sqlite3
+from contextlib import contextmanager
 from email.message import EmailMessage
 from email.utils import parseaddr
 from functools import wraps
@@ -18,9 +19,11 @@ from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2 import id_token as google_id_token
 from google.oauth2.credentials import Credentials
+from google_auth_httplib2 import AuthorizedHttp
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+import httplib2
 from urllib3.util import connection as urllib3_connection
 from ai import analyze_transcript
 
@@ -56,11 +59,31 @@ OAUTH_SCOPES = [
     GMAIL_SEND_SCOPE,
 ]
 _redirect_host = urlparse(app.config["GOOGLE_OAUTH_REDIRECT_URI"]).hostname
-if _redirect_host in {"localhost", "127.0.0.1", "::1"}:
+LOCAL_OAUTH_HOSTS = {"localhost", "127.0.0.1", "::1"}
+if _redirect_host in LOCAL_OAUTH_HOSTS:
     os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")
     # 一部のローカルネットワークではGoogle APIへのIPv6接続が応答待ちになるため、
     # localhost用OAuthの場合だけ外向きHTTP通信をIPv4に限定する。
     urllib3_connection.allowed_gai_family = lambda: socket.AF_INET
+
+
+@contextmanager
+def local_ipv4_dns():
+    """httplib2で行うローカルOAuth用通信だけをIPv4に限定する。"""
+    if _redirect_host not in LOCAL_OAUTH_HOSTS:
+        yield
+        return
+
+    original_getaddrinfo = socket.getaddrinfo
+
+    def ipv4_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        return original_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
+
+    socket.getaddrinfo = ipv4_getaddrinfo
+    try:
+        yield
+    finally:
+        socket.getaddrinfo = original_getaddrinfo
 
 
 def is_valid_email(address: str) -> bool:
@@ -169,8 +192,12 @@ def send_follow_up_email(recipient: str, subject: str, body: str) -> None:
     message["Subject"] = subject
     message.set_content(body)
     raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
-    build("gmail", "v1", credentials=credentials, cache_discovery=False).users().messages().send(
-        userId="me", body={"raw": raw_message}).execute()
+    app.logger.info("Sending follow-up email with Gmail API")
+    with local_ipv4_dns():
+        authorized_http = AuthorizedHttp(credentials, http=httplib2.Http(timeout=15))
+        build("gmail", "v1", http=authorized_http, cache_discovery=False).users().messages().send(
+            userId="me", body={"raw": raw_message}).execute()
+    app.logger.info("Gmail API send completed")
 
 
 # --- 1. 文字起こしファイル/テキスト読み込み処理 ---
