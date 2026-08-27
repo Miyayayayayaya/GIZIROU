@@ -48,15 +48,18 @@ load_dotenv()
 
 app = Flask(__name__)
 oauth_redirect_uri = os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "http://localhost:5001/oauth2callback")
+configured_secret_key = os.getenv("FLASK_SECRET_KEY")
 app.config.update(
     MAX_CONTENT_LENGTH=26 * 1024 * 1024,
     MAX_FORM_MEMORY_SIZE=5 * 1024 * 1024,
-    SECRET_KEY=os.getenv("FLASK_SECRET_KEY", secrets.token_urlsafe(32)),
+    SECRET_KEY=configured_secret_key or secrets.token_urlsafe(32),
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=urlparse(oauth_redirect_uri).scheme == "https",
     GOOGLE_OAUTH_REDIRECT_URI=oauth_redirect_uri,
 )
+if not configured_secret_key:
+    app.logger.warning("FLASK_SECRET_KEY is not set; login sessions will be reset when the app restarts")
 
 # データベースの初期化（sqlite:///gizirou.db を作成/接続）
 init_db(app)
