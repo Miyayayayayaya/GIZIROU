@@ -172,6 +172,7 @@ textarea[aria-invalid="true"], input[aria-invalid="true"] { border-color: var(--
 .loading-card { width: min(420px, 100%); padding: 42px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: #fff; box-shadow: var(--shadow); text-align: center; }
 .loading-card h2 { margin: 20px 0 8px; font-family: Georgia, serif; font-size: 24px; font-weight: 500; }
 .loading-card p { margin: 0; color: var(--muted); font-size: 13px; }
+.loading-card p.loading-note { margin-top: 6px; font-size: 12px; }
 .loading-spinner { width: 40px; height: 40px; display: inline-block; border: 3px solid var(--brand-soft); border-top-color: var(--brand); border-radius: 50%; animation: spin 0.8s linear infinite; }
 .loading-steps { margin-top: 24px; display: flex; justify-content: center; gap: 6px; }
 .loading-steps span { width: 24px; height: 3px; border-radius: 3px; background: var(--brand-soft); animation: pulse 1.2s ease-in-out infinite; }

@@ -12,7 +12,16 @@ if (inputPage) {
   const fieldError = document.querySelector("#transcript-error");
   const loadingOverlay = document.querySelector("#loading-overlay");
   const analyzeButton = document.querySelector("#analyze-button");
-  const maxFileSize = 1024 * 1024;
+  const maxTextFileSize = 1024 * 1024;
+  const maxAudioFileSize = 25 * 1024 * 1024;
+  const audioExtensions = [".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".wav", ".webm"];
+
+  const fileKind = (file) => {
+    const name = file.name.toLowerCase();
+    if (name.endsWith(".txt")) return "text";
+    if (audioExtensions.some((extension) => name.endsWith(extension))) return "audio";
+    return null;
+  };
 
   const updateCharacterCount = () => {
     characterCount.textContent = `${transcript.value.length.toLocaleString("ja-JP")}文字`;
@@ -41,23 +50,34 @@ if (inputPage) {
     selectedFile.hidden = false;
     selectedFileName.textContent = file.name;
 
-    if (!file.name.toLowerCase().endsWith(".txt")) {
-      showError("アップロードできるファイルは.txt形式のみです。");
-      return;
-    }
-    if (file.size > maxFileSize) {
-      showError("ファイルサイズは1MB以下にしてください。");
+    const kind = fileKind(file);
+    if (!kind) {
+      showError("アップロードできるファイルは.txt形式、または音声ファイル（mp3・m4a・wav等）です。");
       return;
     }
 
-    const reader = new FileReader();
-    reader.addEventListener("load", () => {
-      transcript.value = String(reader.result || "");
-      updateCharacterCount();
-      clearError();
-    });
-    reader.addEventListener("error", () => showError("ファイルを読み込めませんでした。"));
-    reader.readAsText(file, "UTF-8");
+    if (kind === "text") {
+      if (file.size > maxTextFileSize) {
+        showError("txtファイルのサイズは1MB以下にしてください。");
+        return;
+      }
+      const reader = new FileReader();
+      reader.addEventListener("load", () => {
+        transcript.value = String(reader.result || "");
+        updateCharacterCount();
+        clearError();
+      });
+      reader.addEventListener("error", () => showError("ファイルを読み込めませんでした。"));
+      reader.readAsText(file, "UTF-8");
+      return;
+    }
+
+    // 音声ファイルはサーバー側で文字起こしするため、ここではファイルの検証のみ行う
+    if (file.size > maxAudioFileSize) {
+      showError("音声ファイルのサイズは25MB以下にしてください。");
+      return;
+    }
+    clearError();
   });
 
   removeFile.addEventListener("click", () => {
@@ -70,11 +90,17 @@ if (inputPage) {
   form.addEventListener("submit", (event) => {
     const hasText = transcript.value.trim().length > 0;
     const file = fileInput.files[0];
-    const validFile = file && file.name.toLowerCase().endsWith(".txt") && file.size <= maxFileSize;
+    const kind = file && fileKind(file);
+    const validFile =
+      kind === "text"
+        ? file.size <= maxTextFileSize
+        : kind === "audio"
+          ? file.size <= maxAudioFileSize
+          : false;
 
     if (!hasText && !validFile) {
       event.preventDefault();
-      showError("文字起こしを入力するか、txtファイルを選択してください。");
+      showError("文字起こしを入力するか、txt・音声ファイルを選択してください。");
       transcript.focus();
       return;
     }

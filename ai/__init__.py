@@ -1,5 +1,5 @@
 from .email_draft import generate_followup_email
-from .errors import AIModuleError, ExtractionError, GenerationError
+from .errors import AIModuleError, ExtractionError, GenerationError, TranscriptionError
 from .extraction import extract_meeting_data
 from .minutes import generate_minutes
 from .pipeline import analyze_transcript
@@ -11,12 +11,14 @@ from .schemas import (
     MeetingMinutes,
     NextMeetingInfo,
 )
+from .transcription import transcribe_audio
 
 __all__ = [
     "analyze_transcript",
     "extract_meeting_data",
     "generate_minutes",
     "generate_followup_email",
+    "transcribe_audio",
     "ExtractedMeetingData",
     "MeetingInfo",
     "ActionItem",
@@ -26,4 +28,5 @@ __all__ = [
     "AIModuleError",
     "ExtractionError",
     "GenerationError",
+    "TranscriptionError",
 ]

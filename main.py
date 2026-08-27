@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from email.message import EmailMessage
 from email.utils import parseaddr
 from functools import wraps
+from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlencode, urlparse, urlunparse
 
@@ -25,7 +26,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import httplib2
 from urllib3.util import connection as urllib3_connection
-from ai import analyze_transcript
+from ai import TranscriptionError, analyze_transcript, transcribe_audio
 
 # --- database.py から関数・オブジェクトをインポート ---
 from database import (
@@ -40,7 +41,7 @@ load_dotenv()
 
 app = Flask(__name__)
 app.config.update(
-    MAX_CONTENT_LENGTH=1 * 1024 * 1024,
+    MAX_CONTENT_LENGTH=26 * 1024 * 1024,
     SECRET_KEY=os.getenv("FLASK_SECRET_KEY", secrets.token_urlsafe(32)),
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
@@ -51,6 +52,8 @@ app.config.update(
 init_db(app)
 
 ALLOWED_EXTENSIONS = {".txt"}
+ALLOWED_AUDIO_EXTENSIONS = {".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".wav", ".webm"}
+MAX_AUDIO_FILE_SIZE = 25 * 1024 * 1024  # OpenAIの音声文字起こしAPIの上限
 GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
 OAUTH_SCOPES = [
     "openid",
@@ -202,7 +205,7 @@ def send_follow_up_email(recipients: list[str], subject: str, body: str, cc_reci
     app.logger.info("Gmail API send completed")
 
 
-# --- 1. 文字起こしファイル/テキスト読み込み処理 ---
+# --- 1. 文字起こしファイル/音声ファイル/テキスト読み込み処理 ---
 def read_transcript() -> tuple[str, str | None]:
     """Return submitted transcript text without saving the uploaded file."""
     pasted_text = request.form.get("transcript", "").strip()
@@ -212,11 +215,22 @@ def read_transcript() -> tuple[str, str | None]:
         return pasted_text, None
 
     if not uploaded_file or not uploaded_file.filename:
-        return "", "文字起こしを貼り付けるか、txtファイルを選択してください。"
+        return "", "文字起こしを貼り付けるか、txt・音声ファイルを選択してください。"
 
     extension = Path(uploaded_file.filename).suffix.lower()
+
+    if extension in ALLOWED_AUDIO_EXTENSIONS:
+        audio_bytes = uploaded_file.read()
+        if len(audio_bytes) > MAX_AUDIO_FILE_SIZE:
+            return "", "音声ファイルのサイズが大きすぎます（最大25MB）。ファイルを短くしてお試しください。"
+        try:
+            return transcribe_audio(BytesIO(audio_bytes), uploaded_file.filename), None
+        except TranscriptionError:
+            app.logger.exception("Audio transcription failed")
+            return "", "音声ファイルの文字起こしに失敗しました。ファイル形式やサイズをご確認のうえ、もう一度お試しください。"
+
     if extension not in ALLOWED_EXTENSIONS:
-        return "", "アップロードできるファイルは.txt形式のみです。"
+        return "", "アップロードできるファイルは.txt形式、または音声ファイル（mp3・m4a・wav等）です。"
 
     try:
         return uploaded_file.read().decode("utf-8-sig").strip(), None
