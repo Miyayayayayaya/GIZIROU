@@ -290,8 +290,8 @@ def run_ai_analysis(transcript: str) -> dict:
 def use_oauth_redirect_host():
     """OAuthセッション保持のため、ローカル開発時のホスト名を統一する。"""
     redirect_uri = urlparse(app.config["GOOGLE_OAUTH_REDIRECT_URI"])
-    request_host = request.host.split(":", 1)[0]
-    if redirect_uri.hostname == "localhost" and request_host == "127.0.0.1":
+    request_host = urlparse(request.host_url).hostname
+    if redirect_uri.hostname == "localhost" and request_host != "localhost":
         canonical_url = urlunparse(
             (
                 request.scheme,
@@ -389,6 +389,7 @@ def oauth2callback():
             flow.credentials.id_token,
             Request(),
             oauth_client_config()["web"]["client_id"],
+            clock_skew_in_seconds=10,
         )
         if not id_info.get("email") or not id_info.get("email_verified"):
             raise ValueError("Googleアカウントのメールアドレスを確認できませんでした。")
