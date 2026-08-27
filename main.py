@@ -261,9 +261,9 @@ def build_calendar_url(next_meeting: dict) -> str:
 
 
 # --- 3. AIによる実解析処理 ---
-def run_ai_analysis(transcript: str) -> dict:
+def run_ai_analysis(transcript: str, sender_name: str | None = None) -> dict:
     """ai.analyze_transcript() を呼び出して議事録を解析する"""
-    result = analyze_transcript(transcript)
+    result = analyze_transcript(transcript, sender_name=sender_name or None)
 
     # Backend側で Calendar URL を生成して埋め込み（AI側では生成しない）
     calendar_url = build_calendar_url(result["next_meeting"])
@@ -309,25 +309,37 @@ def use_oauth_redirect_host():
 def index():
     if not is_logged_in():
         return render_template("login.html")
-    return render_template("index.html", error=None, transcript="")
+    return render_template(
+        "index.html",
+        error=None,
+        transcript="",
+        sender_name=session.get("sender_name", ""),
+    )
 
 
 @app.post("/analyze")
 @login_required
 def analyze():
     transcript, error = read_transcript()
+    sender_name = request.form.get("sender_name", "").strip()
+    if sender_name:
+        session["sender_name"] = sender_name
+    else:
+        session.pop("sender_name", None)
+
     if error or not transcript:
         return (
             render_template(
                 "index.html",
                 error=error or "文字起こしの内容が空です。",
                 transcript=request.form.get("transcript", ""),
+                sender_name=sender_name,
             ),
             400,
         )
 
     try:
-        analysis_result = run_ai_analysis(transcript)
+        analysis_result = run_ai_analysis(transcript, sender_name)
 
         # ★ SQLite データベースに解析結果と文字起こし原文を自動保存
         saved_meeting = save_meeting(analysis_result, transcript)
@@ -340,6 +352,7 @@ def analyze():
                 "index.html",
                 error=f"解析エラーが発生しました: {str(e)}",
                 transcript=transcript,
+                sender_name=sender_name,
             ),
             500,
         )
