@@ -102,6 +102,37 @@ AIの解析が完了した会議について、文字起こし・議事録・分
 
 アプリを開いたら「Googleでログイン」を選択して認証・認可します。認可トークンはローカルの `instance/oauth_tokens.sqlite3` に保存されます。ローカルでは必ず `http://localhost:5001` を使用し、`127.0.0.1` と混在させないでください。
 
+#### AWS（EC2）での公開
+
+まずは単一のEC2インスタンスにデプロイする構成で動かせます。EC2はUbuntuを選び、Security GroupではHTTP/HTTPSを公開し、SSH（22番）は自分のIPアドレスだけに制限してください。
+
+1. EC2にリポジトリを配置し、Python仮想環境を作成します。
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+2. `.env` を作成し、`OPENAI_API_KEY`、`FLASK_SECRET_KEY`、Google OAuthの値を設定します。`GOOGLE_OAUTH_REDIRECT_URI` は公開URLと完全一致させます。HTTPSの場合の例は次のとおりです。
+
+```env
+GOOGLE_OAUTH_REDIRECT_URI=https://example.com/oauth2callback
+FLASK_DEBUG=false
+PORT=8000
+```
+
+3. Google Cloud ConsoleのOAuthクライアントに、同じ `https://example.com/oauth2callback` をAuthorized redirect URIとして登録します。HTTPのIPアドレスを本番のコールバックに使わず、Route 53等でドメインを割り当て、ALBまたはNginxでHTTPS化してください。
+
+4. EC2内ではGunicornで起動します。
+
+```bash
+source .venv/bin/activate
+gunicorn --bind 127.0.0.1:8000 --workers 2 main:app
+```
+
+Nginxをリバースプロキシとして443からGunicornへ転送し、systemdでGunicornを常駐化してください。`instance/`にはSQLiteとOAuthトークンが保存されるため、単一EC2で運用し、定期バックアップを設定します。複数台構成や本格運用では、SQLiteをRDS等へ移行し、OAuthトークンも共有ストレージや暗号化されたDBで管理してください。
+
 ## 処理フロー
 
 ```text

@@ -505,4 +505,8 @@ def api_delete_meeting(meeting_id: int):
 if __name__ == "__main__":
     # macOSの localhost は IPv6 (::1) を優先することがあるため、
     # Google OAuth のコールバックを IPv4 / IPv6 の両方で受け付ける。
-    app.run(host="::", port=5001, debug=True)
+    app.run(
+        host=os.getenv("FLASK_HOST", "::"),
+        port=int(os.getenv("PORT", "5001")),
+        debug=os.getenv("FLASK_DEBUG", "true").lower() == "true",
+    )
