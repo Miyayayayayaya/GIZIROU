@@ -5,6 +5,7 @@ from email import message_from_bytes
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from ai.errors import TranscriptionError
 from main import app, send_follow_up_email
 
 
@@ -104,7 +105,39 @@ class FrontendFlowTest(unittest.TestCase):
             content_type="multipart/form-data",
         )
         self.assertEqual(response.status_code, 400)
-        self.assertIn(".txt形式のみ", response.get_data(as_text=True))
+        self.assertIn("音声ファイル", response.get_data(as_text=True))
+
+    def test_audio_upload_is_transcribed_and_renders_review_page(self):
+        with patch("main.transcribe_audio", return_value="会議の文字起こし結果") as mock_transcribe:
+            response = self.client.post(
+                "/analyze",
+                data={"transcript_file": (io.BytesIO(b"fake-audio-bytes"), "meeting.mp3")},
+                content_type="multipart/form-data",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("議事録", response.get_data(as_text=True))
+        mock_transcribe.assert_called_once()
+        self.assertEqual(mock_transcribe.call_args.args[1], "meeting.mp3")
+
+    def test_oversized_audio_upload_is_rejected(self):
+        oversized = io.BytesIO(b"0" * (25 * 1024 * 1024 + 1))
+        response = self.client.post(
+            "/analyze",
+            data={"transcript_file": (oversized, "meeting.wav")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("25MB", response.get_data(as_text=True))
+
+    def test_failed_audio_transcription_shows_friendly_error(self):
+        with patch("main.transcribe_audio", side_effect=TranscriptionError("boom")):
+            response = self.client.post(
+                "/analyze",
+                data={"transcript_file": (io.BytesIO(b"fake-audio-bytes"), "meeting.mp3")},
+                content_type="multipart/form-data",
+            )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("文字起こしに失敗しました", response.get_data(as_text=True))
 
     def test_ambiguous_next_meeting_shows_warning_without_calendar_link(self):
         result = {

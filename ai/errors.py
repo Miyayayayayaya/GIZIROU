@@ -8,3 +8,7 @@ class ExtractionError(AIModuleError):
 
 class GenerationError(AIModuleError):
     """Raised when minutes or email generation fails."""
+
+
+class TranscriptionError(AIModuleError):
+    """Raised when audio transcription fails or returns empty output."""

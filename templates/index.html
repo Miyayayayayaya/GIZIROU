@@ -61,20 +61,20 @@
             aria-describedby="transcript-help transcript-error"
           >{{ transcript }}</textarea>
           <p id="transcript-help" class="field-help">会議の文字起こしをそのまま貼り付けてください。</p>
-          <p id="transcript-error" class="field-error" role="alert" hidden>文字起こしを入力するか、txtファイルを選択してください。</p>
+          <p id="transcript-error" class="field-error" role="alert" hidden>文字起こしを入力するか、txt・音声ファイルを選択してください。</p>
         </div>
 
         <div class="divider"><span>または</span></div>
 
         <div class="upload-field">
-          <input id="transcript-file" name="transcript_file" type="file" accept=".txt,text/plain" class="visually-hidden">
+          <input id="transcript-file" name="transcript_file" type="file" accept=".txt,text/plain,.mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm,audio/*" class="visually-hidden">
           <label for="transcript-file" class="upload-label">
             <span class="upload-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="24" height="24"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </span>
             <span>
-              <strong>txtファイルを選択</strong>
-              <small>UTF-8形式・最大1MB</small>
+              <strong>txt・音声ファイルを選択</strong>
+              <small>txt(UTF-8)は最大1MB、音声ファイルは最大25MB</small>
             </span>
           </label>
           <div id="selected-file" class="selected-file" aria-live="polite" hidden>
@@ -97,6 +97,7 @@
       <span class="loading-spinner" aria-hidden="true"></span>
       <h2>会議内容を整理しています</h2>
       <p>議事録、ToDo、メールの下書きを作成中です。</p>
+      <p class="loading-note">音声ファイルの場合、文字起こしに数分かかることがあります。</p>
       <div class="loading-steps" aria-hidden="true"><span></span><span></span><span></span></div>
     </div>
   </div>
