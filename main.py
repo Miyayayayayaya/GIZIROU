@@ -4,6 +4,7 @@ import base64
 import json
 import os
 import secrets
+import socket
 import sqlite3
 from email.message import EmailMessage
 from email.utils import parseaddr
@@ -20,6 +21,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from urllib3.util import connection as urllib3_connection
 from ai import analyze_transcript
 
 # --- database.py から関数・オブジェクトをインポート ---
@@ -56,6 +58,9 @@ OAUTH_SCOPES = [
 _redirect_host = urlparse(app.config["GOOGLE_OAUTH_REDIRECT_URI"]).hostname
 if _redirect_host in {"localhost", "127.0.0.1", "::1"}:
     os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")
+    # 一部のローカルネットワークではGoogle APIへのIPv6接続が応答待ちになるため、
+    # localhost用OAuthの場合だけ外向きHTTP通信をIPv4に限定する。
+    urllib3_connection.allowed_gai_family = lambda: socket.AF_INET
 
 
 def is_valid_email(address: str) -> bool:
