@@ -786,7 +786,7 @@ def api_delete_meeting(meeting_id: int):
 
 if __name__ == "__main__":
     app.run(
-        host=os.getenv("FLASK_HOST", "127.0.0.1"),
+        host=os.getenv("FLASK_HOST", "0.0.0.0"),
         port=int(os.getenv("PORT", "5001")),
         debug=os.getenv("FLASK_DEBUG", "").casefold() in {"1", "true", "yes"},
     )
