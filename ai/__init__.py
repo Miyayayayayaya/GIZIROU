@@ -3,6 +3,7 @@ from .errors import AIModuleError, ExtractionError, GenerationError, Transcripti
 from .extraction import extract_meeting_data
 from .minutes import generate_minutes
 from .pipeline import analyze_transcript
+from .translation import generate_english_followup_content
 from .schemas import (
     ActionItem,
     ExtractedMeetingData,
@@ -18,6 +19,7 @@ __all__ = [
     "extract_meeting_data",
     "generate_minutes",
     "generate_followup_email",
+    "generate_english_followup_content",
     "transcribe_audio",
     "ExtractedMeetingData",
     "MeetingInfo",

@@ -367,6 +367,21 @@ def run_ai_analysis(transcript: str, sender_name: str | None = None) -> dict:
             calendar_section = f"Google Calendarに追加：\n{calendar_url}"
             result["email"]["body"] = f"{email_body.rstrip()}\n\n{calendar_section}".lstrip()
 
+    english = result.get("english") or {}
+    english_email = english.get("email") or {}
+    english_minutes = english.get("external_minutes", "").strip()
+    if not english_minutes or not english_email.get("subject") or not english_email.get("body"):
+        raise AIModuleError("英語版の議事録を生成できませんでした。")
+
+    english_body = english_email["body"].strip()
+    if english_minutes not in english_body:
+        english_body = f"{english_body}\n\nMeeting Minutes\n{english_minutes}"
+    if calendar_url and calendar_url not in english_body:
+        english_body = f"{english_body}\n\nAdd to Google Calendar:\n{calendar_url}"
+    result["english"] = {
+        "external_minutes": english_minutes,
+        "email": {"subject": english_email["subject"].strip(), "body": english_body},
+    }
     # UI用補助データ
     result["source_excerpt"] = " ".join(transcript.split())[:120]
     result["is_demo"] = False
@@ -565,36 +580,78 @@ def google_disconnect():
 @app.post("/send-email")
 @login_required
 def send_email():
-    recipients = [address.strip() for address in request.form.getlist("email_to") if address.strip()]
-    cc_recipients = [address.strip() for address in request.form.getlist("email_cc") if address.strip()]
+    def recipients_with_language(kind: str) -> list[tuple[str, str]]:
+        addresses = [address.strip() for address in request.form.getlist(f"email_{kind}") if address.strip()]
+        languages = request.form.getlist(f"email_{kind}_language")
+        if not languages:
+            languages = ["ja"] * len(addresses)
+        if len(addresses) != len(languages):
+            raise ValueError("宛先と言語の指定数が一致しません。")
+        return list(zip(addresses, languages))
+
+    try:
+        to_entries = recipients_with_language("to")
+        cc_entries = recipients_with_language("cc")
+    except ValueError:
+        return render_template("email_status.html", success=False, message="宛先と言語の指定を確認してください。"), 400
+
+    recipients = [address for address, _language in to_entries]
+    cc_recipients = [address for address, _language in cc_entries]
     subject = request.form.get("email_subject", "").strip()
     body = request.form.get("email_body", "").strip()
+    english_subject = request.form.get("english_email_subject", "").strip()
+    english_body = request.form.get("english_email_body", "").strip()
     all_recipients = recipients + cc_recipients
     normalized_recipients = [address.casefold() for address in all_recipients]
     has_duplicate = len(normalized_recipients) != len(set(normalized_recipients))
-    has_invalid_subject = "\r" in subject or "\n" in subject
-    if not recipients or not all(is_valid_email(address) for address in all_recipients) or has_duplicate or not subject or has_invalid_subject or not body:
+    has_invalid_subject = any("\r" in value or "\n" in value for value in (subject, english_subject))
+    language_groups = {"ja": {"to": [], "cc": []}, "en": {"to": [], "cc": []}}
+    for kind, entries in (("to", to_entries), ("cc", cc_entries)):
+        for address, language in entries:
+            if language not in language_groups:
+                return render_template("email_status.html", success=False, message="送信言語の指定が正しくありません。"), 400
+            language_groups[language][kind].append(address)
+
+    english_is_selected = bool(language_groups["en"]["to"] or language_groups["en"]["cc"])
+    has_cc_without_to = any(group["cc"] and not group["to"] for group in language_groups.values())
+    if (
+        not recipients
+        or not all(is_valid_email(address) for address in all_recipients)
+        or has_duplicate
+        or not subject
+        or not body
+        or has_invalid_subject
+        or (english_is_selected and (not english_subject or not english_body))
+        or has_cc_without_to
+    ):
         return render_template(
             "email_status.html",
             success=False,
-            message="Toを1件以上追加し、重複のない正しい宛先、件名、メール本文を入力してください。",
+            message="Toを各送信言語で1件以上追加し、重複のない正しい宛先、件名、メール本文を入力してください。",
         ), 400
     if not is_gmail_connected():
         return render_template("email_status.html", success=False, message="メール送信にはGoogleアカウントの連携が必要です。", connect_url=url_for("google_connect")), 401
     try:
-        send_follow_up_email(recipients, subject, body, cc_recipients)
+        for language, group in language_groups.items():
+            if not group["to"]:
+                continue
+            selected_subject, selected_body = (subject, body) if language == "ja" else (english_subject, english_body)
+            send_follow_up_email(group["to"], selected_subject, selected_body, group["cc"])
     except HttpError:
         app.logger.exception("Gmail API rejected send request")
         return render_template("email_status.html", success=False, message="Gmail APIでメールを送信できませんでした。連携をやり直してください。"), 502
     except (OSError, RuntimeError, ValueError):
         app.logger.exception("Unable to send follow-up email")
         return render_template("email_status.html", success=False, message="メールを送信できませんでした。ネットワーク接続を確認してください。"), 502
-    recipient_summary = f"To: {', '.join(recipients)}"
-    if cc_recipients:
-        recipient_summary += f" / CC: {', '.join(cc_recipients)}"
-    return render_template("email_status.html", success=True, recipient=recipient_summary)
 
-
+    summaries = []
+    for language, group in language_groups.items():
+        if group["to"]:
+            summary = f"{'日本語' if language == 'ja' else 'English'}: To: {', '.join(group['to'])}"
+            if group["cc"]:
+                summary += f" / CC: {', '.join(group['cc'])}"
+            summaries.append(summary)
+    return render_template("email_status.html", success=True, recipient=" / ".join(summaries))
 @app.post("/api/meetings/<int:meeting_id>/calendar-event")
 @login_required
 def api_add_calendar_event(meeting_id: int):
