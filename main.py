@@ -134,8 +134,9 @@ def create_oauth_flow(state: str | None = None, code_verifier: str | None = None
 
 
 def token_database() -> sqlite3.Connection:
-    Path(app.instance_path).mkdir(parents=True, exist_ok=True)
-    database_path = Path(app.instance_path) / "oauth_tokens.sqlite3"
+    data_directory = Path(os.getenv("PERSISTENT_DATA_DIR", app.instance_path))
+    data_directory.mkdir(parents=True, exist_ok=True)
+    database_path = data_directory / "oauth_tokens.sqlite3"
     connection = sqlite3.connect(database_path)
     try:
         os.chmod(database_path, 0o600)

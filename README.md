@@ -112,7 +112,7 @@ python main.py
 
 Google Cloud側ではGmail APIとGoogle Calendar APIを有効にしてください。アプリを開いたら「Googleでログイン」を選択し、メール送信とカレンダー予定作成の権限を認可します。Calendar権限の追加前にログイン済みだった場合は、一度Google連携をやり直してください。
 
-認可トークンはローカルの `instance/oauth_tokens.sqlite3` に保存されます。ローカルでは必ず `http://localhost:5001` を使用し、`127.0.0.1` と混在させないでください。
+認可トークンはローカルでは `instance/oauth_tokens.sqlite3` に保存されます。ローカルでは必ず `http://localhost:5001` を使用し、`127.0.0.1` と混在させないでください。Renderなどで再起動後もログイン・Google連携を維持する場合は、Persistent Diskをマウントし、`PERSISTENT_DATA_DIR` にそのマウント先（例: `/var/data`）を設定してください。会議履歴とOAuthトークンがそのディレクトリに保存されます。
 
 AWS等では `FLASK_HOST=0.0.0.0`、利用する `PORT`、HTTPSの `GOOGLE_OAUTH_REDIRECT_URI` を環境変数へ設定してください。`FLASK_DEBUG` は本番・デモ環境では `false` のままにします。HTTPSのOAuth URLを設定するとセッションCookieもSecure属性付きになります。
 

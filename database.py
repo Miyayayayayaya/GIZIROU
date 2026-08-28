@@ -46,12 +46,14 @@ class Meeting(db.Model):
 # --- 2. データベース操作用関数 (CRUD) ---
 def init_db(app):
     """データベースの初期化"""
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///gizirou.db"
+    data_directory = Path(os.getenv("PERSISTENT_DATA_DIR", app.instance_path))
+    data_directory.mkdir(parents=True, exist_ok=True)
+    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{data_directory / 'gizirou.db'}"
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     db.init_app(app)
     with app.app_context():
         db.create_all()
-        database_path = Path(app.instance_path) / "gizirou.db"
+        database_path = data_directory / "gizirou.db"
         try:
             os.chmod(database_path, 0o600)
         except OSError:
