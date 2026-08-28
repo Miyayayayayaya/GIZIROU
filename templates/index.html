@@ -26,7 +26,14 @@
           <p class="step-label">STEP 01</p>
           <h2>文字起こしを追加</h2>
         </div>
-        <span class="privacy-note">履歴に保存されます</span>
+        <div class="card-heading-actions">
+          <span class="privacy-note">履歴に保存されます</span>
+          {% if gmail_connected %}
+            <span class="privacy-note">Google連携済み</span>
+          {% else %}
+            <a class="secondary-button" href="{{ url_for('google_connect') }}">Google連携</a>
+          {% endif %}
+        </div>
       </div>
 
       {% if error %}

@@ -120,6 +120,7 @@ a { color: inherit; }
 .input-card { border-radius: var(--radius-lg); padding: clamp(26px, 4vw, 42px); }
 .card-heading, .section-heading, .field-label-row, .email-actions { display: flex; align-items: center; }
 .card-heading { justify-content: space-between; gap: 16px; margin-bottom: 28px; }
+.card-heading-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .card-heading h2, .section-heading h2 { margin: 0; font-size: 22px; letter-spacing: -0.025em; }
 .step-label, .section-kicker { margin: 0 0 2px; color: var(--brand); font-size: 10px; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase; }
 .privacy-note { padding: 5px 10px; color: var(--muted); border: 1px solid var(--line); }

@@ -459,6 +459,7 @@ def index():
         error=None,
         transcript="",
         sender_name=session.get("sender_name", ""),
+        gmail_connected=is_gmail_connected(),
     )
 
 
