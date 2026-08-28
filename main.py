@@ -150,7 +150,18 @@ def save_credentials(credentials: Credentials) -> None:
     token_id = session.get("oauth_token_id") or secrets.token_urlsafe(32)
     session["oauth_token_id"] = token_id
     with token_database() as connection:
-        connection.execute("INSERT OR REPLACE INTO oauth_tokens (session_id, token_json) VALUES (?, ?)", (token_id, credentials.to_json()))
+        previous = connection.execute(
+            "SELECT token_json FROM oauth_tokens WHERE session_id = ?", (token_id,)
+        ).fetchone()
+        token_info = json.loads(credentials.to_json())
+        if not token_info.get("refresh_token") and previous:
+            previous_info = json.loads(previous[0])
+            if previous_info.get("refresh_token"):
+                token_info["refresh_token"] = previous_info["refresh_token"]
+        connection.execute(
+            "INSERT OR REPLACE INTO oauth_tokens (session_id, token_json) VALUES (?, ?)",
+            (token_id, json.dumps(token_info)),
+        )
 
 
 def clear_credentials() -> None:
@@ -170,7 +181,11 @@ def get_credentials() -> Credentials | None:
         return None
     # 保存済みトークンが実際に持つ権限を維持する。新しい権限を引数で
     # 上書きすると、未認可でも認可済みと誤判定するため scopes は渡さない。
-    credentials = Credentials.from_authorized_user_info(json.loads(row[0]))
+    try:
+        credentials = Credentials.from_authorized_user_info(json.loads(row[0]))
+    except (ValueError, TypeError, json.JSONDecodeError):
+        app.logger.exception("Saved Google OAuth credentials are invalid")
+        return None
     if credentials.expired and credentials.refresh_token:
         try:
             credentials.refresh(Request())
@@ -507,6 +522,7 @@ def google_connect():
             access_type="offline",
             include_granted_scopes="true",
             login_hint=session.get("user_email"),
+            prompt="consent",
         )
     except RuntimeError as error:
         return render_template("email_status.html", success=False, message=str(error)), 500
