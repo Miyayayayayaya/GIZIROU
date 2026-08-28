@@ -184,8 +184,12 @@ def get_credentials() -> Credentials | None:
 
 
 def is_gmail_connected() -> bool:
-    credentials = get_credentials()
-    return bool(credentials and credentials.has_scopes([GMAIL_SEND_SCOPE]))
+    try:
+        credentials = get_credentials()
+        return bool(credentials and credentials.has_scopes([GMAIL_SEND_SCOPE]))
+    except (OSError, sqlite3.Error, ValueError, TypeError):
+        app.logger.exception("Unable to check Google connection")
+        return False
 
 
 def has_calendar_permission(credentials: Credentials | None) -> bool:
