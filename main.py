@@ -498,7 +498,11 @@ def analyze():
 def google_connect():
     try:
         flow = create_oauth_flow()
-        authorization_url, state = flow.authorization_url(access_type="offline", include_granted_scopes="true", prompt="consent")
+        authorization_url, state = flow.authorization_url(
+            access_type="offline",
+            include_granted_scopes="true",
+            login_hint=session.get("user_email"),
+        )
     except RuntimeError as error:
         return render_template("email_status.html", success=False, message=str(error)), 500
     session["oauth_state"] = state
